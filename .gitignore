@@ -1,0 +1,27 @@
+# Mojang-copyrighted reference material — NEVER commit, NEVER push.
+# - src/ : deobfuscated Minecraft 1.0 Java sources (local reference only)
+# - assets/ : textures, sounds, music extracted from minecraft.jar / resources
+src/
+assets/
+resources/
+
+# Build artefacts
+build/
+cmake-build-*/
+out/
+*.o
+*.a
+*.so
+*.out
+Craft++
+craft++
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+.clangd/
+compile_commands.json
+.cache/
