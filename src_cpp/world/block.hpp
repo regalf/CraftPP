@@ -14,6 +14,9 @@ enum class BlockId : std::uint8_t {
   Grass = 2,
   Dirt = 3,
   Bedrock = 7,
+  Water = 9,
+  Sand = 12,
+  Ice = 79,
 };
 
 // Block faces, same ids as getBlockTexture(..., side): 0=bottom 1=top

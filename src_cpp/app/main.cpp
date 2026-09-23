@@ -28,6 +28,8 @@
 #include "render/tessellator.hpp"
 #include "render/texture.hpp"
 #include "world/chunk.hpp"
+#include "world/chunk_manager.hpp"
+#include "world/provider.hpp"
 
 namespace {
 
@@ -40,6 +42,8 @@ void tick_game() { ++g_tick_count; }
 struct Args {
   std::string assets = "assets";
   std::string screenshot;
+  std::int64_t seed = 1;
+  bool flat = false;
 };
 
 Args parse_args(int argc, char** argv) {
@@ -49,6 +53,10 @@ Args parse_args(int argc, char** argv) {
       a.assets = argv[++i];
     } else if (std::strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
       a.screenshot = argv[++i];
+    } else if (std::strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
+      a.seed = std::atoll(argv[++i]);
+    } else if (std::strcmp(argv[i], "--flat") == 0) {
+      a.flat = true;
     }
   }
   return a;
@@ -123,7 +131,21 @@ int main(int argc, char** argv) {
 
   // --- world + mesh ---
   craftpp::world::Chunk chunk;
-  craftpp::world::fill_flat(chunk);
+  if (args.flat) {
+    craftpp::world::fill_flat(chunk);
+  } else {
+    craftpp::world::ChunkManager manager(args.seed);
+    craftpp::world::TerrainProvider provider(manager, args.seed);
+    provider.set_chunk_seed(0, 0);
+    std::vector<std::int8_t> raw;
+    provider.generate_terrain(0, 0, raw);
+    provider.replace_biome_blocks(0, 0, raw, manager.block_biomes(0, 0, 16, 16));
+    craftpp::world::fill_from_raw(chunk, raw.data());
+    char seed_buf[64];
+    std::snprintf(seed_buf, sizeof(seed_buf), "generated chunk (0,0) seed %lld",
+                  static_cast<long long>(args.seed));
+    craftpp::log_info(seed_buf);
+  }
   const craftpp::render::Mesh mesh = mesher.mesh_chunk(chunk);
   char buf[96];
   std::snprintf(buf, sizeof(buf), "meshed %zu verts %zu indices", mesh.vertices.size(),
@@ -135,7 +157,7 @@ int main(int argc, char** argv) {
   glCullFace(GL_BACK);
 
   craftpp::render::Frustum frustum;
-  const craftpp::Aabb chunk_box(0.0, 0.0, 0.0, 16.0, 5.0, 16.0);
+  const craftpp::Aabb chunk_box(0.0, 0.0, 0.0, 16.0, 128.0, 16.0);
 
   // GL-owned objects (atlas, tess, prog) must die before glfwTerminate, hence
   // the inner scope.
@@ -184,10 +206,11 @@ int main(int argc, char** argv) {
     glfwGetFramebufferSize(window, &w, &h);
     glViewport(0, 0, w, h);
 
-    // Slow orbit around the chunk centre.
-    const float angle = static_cast<float>(elapsed * 0.15);
-    const glm::vec3 eye(8.0F + std::cos(angle) * 22.0F, 13.0F, 8.0F + std::sin(angle) * 22.0F);
-    const glm::vec3 center(8.0F, 2.5F, 8.0F);
+    // Slow orbit around the chunk centre, low enough to read the surface.
+    // Starts at ~40 degrees for a three-quarter view.
+    const float angle = 0.7F + static_cast<float>(elapsed * 0.12);
+    const glm::vec3 eye(8.0F + std::cos(angle) * 30.0F, 76.0F, 8.0F + std::sin(angle) * 30.0F);
+    const glm::vec3 center(8.0F, 61.0F, 8.0F);
     const glm::mat4 view = glm::lookAt(eye, center, glm::vec3(0.0F, 1.0F, 0.0F));
     const glm::mat4 proj =
         glm::perspective(glm::radians(70.0F), static_cast<float>(w) / h, 0.1F, 256.0F);
@@ -200,8 +223,8 @@ int main(int argc, char** argv) {
     prog.use();
     prog.set_mat4(u_mvp, &vp[0][0]);
     prog.set_mat4(u_view, &view[0][0]);
-    prog.set_float(u_fog_start, 28.0F);
-    prog.set_float(u_fog_end, 96.0F);
+    prog.set_float(u_fog_start, 60.0F);
+    prog.set_float(u_fog_end, 220.0F);
     prog.set_vec3(u_fog_color, 0.74F, 0.84F, 1.0F);
     prog.set_int(u_tex, 0);
     atlas.bind(0);

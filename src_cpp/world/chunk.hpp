@@ -34,4 +34,8 @@ class Chunk {
 // Classic flat layering used by the M2 demo: bedrock, stone, dirt, grass.
 void fill_flat(Chunk& chunk);
 
+// Copies raw generator bytes (Java layout (x*16+z)*128+y, raw block ids)
+// into the chunk, mapping unknown ids to Air.
+void fill_from_raw(Chunk& chunk, const std::int8_t* raw);
+
 }  // namespace craftpp::world

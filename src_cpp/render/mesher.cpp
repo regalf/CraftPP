@@ -66,10 +66,17 @@ Mesh Mesher::mesh_chunk(const world::Chunk& chunk) const {
         const BlockId id = chunk.get(x, y, z);
         if (id == BlockId::Air) continue;
         const world::BlockDef& def = world::block_def(id);
-        if (!def.opaque) continue;  // M2 has opaque cubes only
+        // Water renders its own faces but never occludes (source fluid logic,
+        // simplified for M3: faces against air only).
+        const bool occluding = def.opaque && id != BlockId::Water;
 
         for (const FaceDesc& f : kFaces) {
-          if (world::block_def(chunk.get(x + f.nx, y + f.ny, z + f.nz)).opaque) continue;
+          const BlockId neighbor = chunk.get(x + f.nx, y + f.ny, z + f.nz);
+          if (occluding) {
+            if (world::block_def(neighbor).opaque && neighbor != BlockId::Water) continue;
+          } else {
+            if (neighbor != BlockId::Air) continue;
+          }
 
           const int tile = world::tile_for(id, f.face);
           float u0 = 0.0F;
@@ -81,7 +88,11 @@ Mesh Mesher::mesh_chunk(const world::Chunk& chunk) const {
           float r = f.shade;
           float g = f.shade;
           float b = f.shade;
-          if (def.grass_tinted && f.face != Face::Bottom) {
+          if (id == BlockId::Water) {
+            r *= 0.15F;
+            g *= 0.35F;
+            b *= 0.85F;
+          } else if (def.grass_tinted && f.face != Face::Bottom) {
             r *= tint_r;
             g *= tint_g;
             b *= tint_b;
