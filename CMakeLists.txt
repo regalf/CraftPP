@@ -10,8 +10,11 @@ find_package(glfw3 3.3 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(Catch2 3 REQUIRED)
+find_package(glm REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(EPOXY REQUIRED epoxy)
 
-# ---- core library (logic, no GL) ----
+# ---- core library (logic, no GL calls at runtime in tests) ----
 add_library(craftpp_core
   src_cpp/core/log.cpp
   src_cpp/core/random.cpp
@@ -19,9 +22,17 @@ add_library(craftpp_core
   src_cpp/core/vec3.cpp
   src_cpp/core/aabb.cpp
   src_cpp/core/nbt.cpp
+  src_cpp/world/block.cpp
+  src_cpp/world/chunk.cpp
+  src_cpp/render/mesher.cpp
+  src_cpp/render/frustum.cpp
+  src_cpp/render/shader.cpp
+  src_cpp/render/texture.cpp
+  src_cpp/render/stb_impl.cpp
+  src_cpp/render/tessellator.cpp
 )
-target_include_directories(craftpp_core PUBLIC src_cpp)
-target_link_libraries(craftpp_core PUBLIC ZLIB::ZLIB)
+target_include_directories(craftpp_core PUBLIC src_cpp third_party ${EPOXY_INCLUDE_DIRS})
+target_link_libraries(craftpp_core PUBLIC ZLIB::ZLIB glm::glm ${EPOXY_LIBRARIES})
 
 # ---- main application (owns the GL context) ----
 add_executable(craftpp
@@ -37,6 +48,8 @@ add_executable(craftpp_tests
   tests/test_random.cpp
   tests/test_math.cpp
   tests/test_nbt.cpp
+  tests/test_mesher.cpp
+  tests/test_frustum.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
 catch_discover_tests(craftpp_tests)
