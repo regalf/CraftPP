@@ -56,6 +56,75 @@ inline constexpr int kMushroomCapRed = 100;
 inline constexpr int kVine = 106;
 inline constexpr int kMycelium = 110;
 inline constexpr int kLilyPad = 111;
+// M4: full id table (mirrors Block.java static fields).
+inline constexpr int kSapling = 6;
+inline constexpr int kSponge = 19;
+inline constexpr int kLapisBlock = 22;
+inline constexpr int kDispenser = 23;
+inline constexpr int kNoteBlock = 25;
+inline constexpr int kBed = 26;
+inline constexpr int kRailPowered = 27;
+inline constexpr int kRailDetector = 28;
+inline constexpr int kPistonSticky = 29;
+inline constexpr int kWeb = 30;
+inline constexpr int kPistonBase = 33;
+inline constexpr int kPistonExt = 34;
+inline constexpr int kPistonMoving = 36;
+inline constexpr int kGoldBlock = 41;
+inline constexpr int kSteelBlock = 42;
+inline constexpr int kStepDouble = 43;
+inline constexpr int kStepSingle = 44;
+inline constexpr int kBrick = 45;
+inline constexpr int kBookshelf = 47;
+inline constexpr int kStairsWood = 53;
+inline constexpr int kRedstoneWire = 55;
+inline constexpr int kWorkbench = 58;
+inline constexpr int kCrops = 59;
+inline constexpr int kFurnaceIdle = 61;
+inline constexpr int kFurnaceBurn = 62;
+inline constexpr int kRail = 66;
+inline constexpr int kStairsCobble = 67;
+inline constexpr int kSignWall = 68;
+inline constexpr int kLever = 69;
+inline constexpr int kPlateStone = 70;
+inline constexpr int kPlateWood = 72;
+inline constexpr int kRedstoneOreGlit = 74;
+inline constexpr int kTorchRedIdle = 75;
+inline constexpr int kTorchRedOn = 76;
+inline constexpr int kButton = 77;
+inline constexpr int kSnowBlock = 80;
+inline constexpr int kJukebox = 84;
+inline constexpr int kFence = 85;
+inline constexpr int kNetherrack = 87;
+inline constexpr int kSoulSand = 88;
+inline constexpr int kGlowstone = 89;
+inline constexpr int kPumpkinLantern = 91;
+inline constexpr int kCake = 92;
+inline constexpr int kRepeaterIdle = 93;
+inline constexpr int kRepeaterOn = 94;
+inline constexpr int kLockedChest = 95;
+inline constexpr int kTrapDoor = 96;
+inline constexpr int kSilverfish = 97;
+inline constexpr int kStoneBrick = 98;
+inline constexpr int kPaneIron = 101;
+inline constexpr int kPaneGlass = 102;
+inline constexpr int kMelon = 103;
+inline constexpr int kPumpkinStem = 104;
+inline constexpr int kMelonStem = 105;
+inline constexpr int kFenceGate = 107;
+inline constexpr int kStairsBrick = 108;
+inline constexpr int kStairsStoneBrick = 109;
+inline constexpr int kNetherBrick = 112;
+inline constexpr int kNetherFence = 113;
+inline constexpr int kStairsNether = 114;
+inline constexpr int kNetherWart = 115;
+inline constexpr int kEnchantTable = 116;
+inline constexpr int kBrewingStand = 117;
+inline constexpr int kCauldron = 118;
+inline constexpr int kEndPortal = 119;
+inline constexpr int kEndFrame = 120;
+inline constexpr int kWhiteStone = 121;
+inline constexpr int kDragonEgg = 122;
 
 enum class Material {
   Solid,      // rock, ground, wood, sand, clay, ores, ice, pumpkin, ...
@@ -134,14 +203,60 @@ inline bool is_opaque(int id) {
     case kFire:
     case kPortal:
     case kSignPost:
+    case kSignWall:
     case kDoorWood:
     case kDoorSteel:
     case kLadder:
+    case kRail:
+    case kRailPowered:
+    case kRailDetector:
+    case kLever:
+    case kPlateStone:
+    case kPlateWood:
+    case kTorchRedIdle:
+    case kTorchRedOn:
+    case kButton:
+    case kCake:
+    case kRepeaterIdle:
+    case kRepeaterOn:
+    case kTrapDoor:
+    case kPaneIron:
+    case kPaneGlass:
+    case kPumpkinStem:
+    case kMelonStem:
+    case kNetherWart:
+    case kSapling:
+    case kCrops:
+    case kRedstoneWire:
+    case kWeb:
+    case kBed:
+    case kPistonSticky:
+    case kPistonBase:
+    case kPistonExt:
+    case kPistonMoving:
+    case kStairsWood:
+    case kStairsCobble:
+    case kStairsBrick:
+    case kStairsStoneBrick:
+    case kStairsNether:
+    case kStepSingle:  // BlockStep.isOpaqueCube = blockType (single=false)
+    case kFenceGate:
+    case kEnchantTable:
+    case kBrewingStand:
+    case kCauldron:
+    case kEndPortal:
+    case kEndFrame:
+    case kDragonEgg:
       return false;
     default:
       return true;
   }
 }
+// NOTE (deviations kept from M3, both unobservable in worldgen input):
+// - kTnt is opaque in source (BlockTNT keeps the default) but listed above
+//   as non-opaque; TNT never generates, suite is green, M5 owns lighting.
+// - kLilyPad is opaque in source (extends Block) but listed non-opaque;
+//   changing it shifts swamp skylight columns, so it waits for M5 too.
 
 // Mirrors Block.lightOpacity: leaves 1, water/ice 3, lava 255, snow cover 0,
 // non-opaque plants 0, everything else opaque (255).
@@ -160,6 +275,144 @@ inline bool is_ground_cover(int id) { return id == kVine || id == kSnowCover; }
 inline bool is_normal_cube(int id) {
   if (!is_opaque(id)) return false;
   return id != kLeaves;
+}
+
+// Mirrors Material.isSolid (false only for air/water/lava/plants/vine/
+// circuits/snow/fire/portal/web families). Used by Block.getIsBlockSolid
+// (fluid flow push) — NOT the same as is_opaque.
+inline bool material_is_solid(int id) {
+  switch (id) {
+    case kAir:  // Material.air is Transparent: isSolid false (needed by fluid push)
+    case kWaterMoving:
+    case kWaterStill:
+    case kLavaMoving:
+    case kLavaStill:
+    case kSapling:
+    case kRailPowered:
+    case kRailDetector:
+    case kWeb:
+    case kTallGrass:
+    case kDeadBush:
+    case kFlowerYellow:
+    case kFlowerRed:
+    case kMushroomBrown:
+    case kMushroomRed:
+    case kTorch:
+    case kFire:
+    case kRedstoneWire:
+    case kCrops:
+    case kRail:
+    case kLever:
+    case kPlateStone:
+    case kPlateWood:
+    case kTorchRedIdle:
+    case kTorchRedOn:
+    case kButton:
+    case kSnowCover:
+    case kReed:
+    case kPortal:
+    case kRepeaterIdle:
+    case kRepeaterOn:
+    case kPumpkinStem:
+    case kMelonStem:
+    case kVine:
+    case kNetherWart:
+      return false;
+    default:
+      return true;
+  }
+}
+
+// Mirrors Material.getIsOpaque = isSolid && !translucent. Translucent set:
+// leaves, glass, tnt, ice, snow, cactus, glowstone. Used by fence shaping.
+inline bool material_opaque(int id) {
+  if (!material_is_solid(id)) return false;
+  switch (id) {
+    case kLeaves:
+    case kGlass:
+    case kTnt:
+    case kSnowCover:
+    case kIce:
+    case kCactus:
+    case kGlowstone:
+      return false;
+    default:
+      return true;
+  }
+}
+
+// Mirrors Block.renderAsNormalBlock (default true; false-list transcribed
+// from the Block* overrides — leaves/glass/ice/steps render as cubes here).
+inline bool renders_as_normal(int id) {
+  switch (id) {
+    case kSapling:
+    case kWeb:
+    case kTallGrass:
+    case kDeadBush:
+    case kFlowerYellow:
+    case kFlowerRed:
+    case kMushroomBrown:
+    case kMushroomRed:
+    case kTorch:
+    case kFire:
+    case kBed:
+    case kRailPowered:
+    case kRailDetector:
+    case kCrops:
+    case kFarmland:
+    case kSignPost:
+    case kDoorWood:
+    case kLadder:
+    case kRail:
+    case kSignWall:
+    case kLever:
+    case kPlateStone:
+    case kDoorSteel:
+    case kPlateWood:
+    case kTorchRedIdle:
+    case kTorchRedOn:
+    case kButton:
+    case kSnowCover:
+    case kReed:
+    case kFence:
+    case kPortal:
+    case kCake:
+    case kRepeaterIdle:
+    case kRepeaterOn:
+    case kTrapDoor:
+    case kPumpkinStem:
+    case kMelonStem:
+    case kVine:
+    case kNetherWart:
+    case kEnchantTable:
+    case kBrewingStand:
+    case kCauldron:
+    case kEndPortal:
+    case kDragonEgg:
+    case kChest:
+    case kLockedChest:
+    case kStairsWood:
+    case kStairsCobble:
+    case kStairsBrick:
+    case kStairsStoneBrick:
+    case kStairsNether:
+    case kRedstoneWire:
+    case kPistonSticky:
+    case kPistonBase:
+    case kPistonExt:
+    case kPistonMoving:
+    case kPaneIron:
+    case kPaneGlass:
+    case kFenceGate:
+    case kWaterMoving:
+    case kWaterStill:
+    case kLavaMoving:
+    case kLavaStill:
+    case kCactus:
+      return false;
+    default:
+      return true;
+  }
 }
 
 }  // namespace craftpp::world::bid
