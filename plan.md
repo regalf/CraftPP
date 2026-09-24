@@ -50,28 +50,29 @@ screenshots.
 seed as Java 1.0 yields same heightmap/trees/ores (automated diff on sampled
 chunks).
 
-Status: **in progress, split for sanity**.
+Status: **done** (split for sanity, all verified differential vs OpenJDK).
 - M3a GenLayer stack + biomes — **done** (6720 ints vs OpenJDK).
 - M3b noise + terrain + surface — **done** (heightmaps + full chunk bytes).
-- M3c caves/ravines — **nearly done, 1 open bug** (see below).
-- M3c decorator (ores/trees/plants/lakes/dungeons) — implemented, validation
-  blocked on the open bug + untriaged. Details in `docs/world.md`.
+- M3c caves/ravines — **done** (7x7 carved base byte-identical; fixed the
+  sticky `var49` grass-top fixup bug, see docs/known-issues.md F6).
+- M3c decorator + populate (ores/trees/plants/lakes/dungeons/springs) —
+  **done**: 5 sites x 3x3 populated chunks bit-identical except ONE documented
+  cell (M5 light-engine gap, see below). Fixed along the way: taiga1 heights,
+  lava-spring draw depth, leaves removal marking, setBlock parity, opaque
+  leaves, fluid spread sim, still-water dispatch, stationary scheduling,
+  shared flow-dir members, deadbush soil, WithNotify placements
+  (vines/dungeons/ice-snow), BigTree heightLimit persistence, lava opacity.
+  Details in `docs/world.md`, `docs/testing.md`, `docs/known-issues.md`.
 
 ## Open bugs (M3c) — detail in `docs/known-issues.md`
 
-1. **Cave grass-top fixup divergence** (blocker): carved base differs from
-   Java in 4/49 tested chunks (seed 1: `(-2,0)`, `(-2,1)`, `(-1,0)`,
-   `(1,0)`), sparse single-cell diffs at carve fringes, e.g. `(8,60,1)`
-   grass-vs-dirt. Spawn sets, node trajectories, width profiles and
-   isolated node carves are all proven identical; the trigger is an
-   unproven ~1-ulp path difference or fixup-order interaction in one node.
-   Next: attribute the first diverging write to its node via the existing
-   chronological W-logs, then bit-level trajectory diff of that node.
-2. **Populate/decorator validation**: `test_populate` (5 sites × 3×3) fails
-   ~875 assertions (tree-height stripes, meta hashes). Partly poisoned by
-   bug 1 (bad base chunks), rest untriaged. Accepted gaps (M4/M5): fluid
-   spread after spring placement, spawner entities, structures, tile-entity
-   contents.
+1. **Single-cell light-engine gap** (accepted M5 item, 2 assertions): tall
+   grass at site (-32,20) chunk (-32,19) local (4,72,11). Java's saved
+   skylight there is stale-low (7, pre-carve hill shade never relit) so
+   `canBlockStay` fails; Craft++ uses live opacity (11) and grows it.
+   Closing it needs the M5 synchronous light engine (`updateLightByType`
+   BFS + `relightBlock` heightMap maintenance on every write). The test
+   keeps the true Java golden with a KNOWN-GAP comment.
 
 ### M4 — Player physics + interaction
 `Entity`, `EntityLiving`, `EntityPlayerSP`, `PlayerController` (survival +

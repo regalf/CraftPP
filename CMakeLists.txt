@@ -29,6 +29,10 @@ add_library(craftpp_core
   src_cpp/world/noise.cpp
   src_cpp/world/chunk_manager.cpp
   src_cpp/world/provider.cpp
+  src_cpp/world/region.cpp
+  src_cpp/world/mapgen.cpp
+  src_cpp/world/fluid.cpp
+  src_cpp/world/worldgen.cpp
   src_cpp/render/mesher.cpp
   src_cpp/render/frustum.cpp
   src_cpp/render/shader.cpp
@@ -56,6 +60,8 @@ add_executable(craftpp_tests
   tests/test_mesher.cpp
   tests/test_genlayer.cpp
   tests/test_terrain.cpp
+  tests/test_mapgen.cpp
+  tests/test_populate.cpp
   tests/test_frustum.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)

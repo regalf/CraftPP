@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 
+#include "core/random.hpp"
+
 namespace craftpp::world {
 
 // Biome ids mirror BiomeGenBase static fields.
@@ -47,5 +49,31 @@ inline std::int32_t biome_temp_int(const BiomeDef& b) {
 inline std::int32_t biome_rain_int(const BiomeDef& b) {
   return static_cast<std::int32_t>(b.rainfall * 65536.0F);
 }
+
+// Per-biome decoration parameters mirroring the BiomeGen* constructors.
+// Negative counts mean "none, loop skipped" (the treesPerChunk +1 gate draw
+// still happens — it is unconditional in decorate_do).
+struct DecorParams {
+  int waterlily = 0;
+  int trees = 0;
+  int flowers = 2;
+  int grass = 1;
+  int dead_bush = 0;
+  int mushrooms = 0;
+  int reeds = 0;
+  int cacti = 0;
+  int sand = 1;
+  int sand2 = 3;
+  int clay = 1;
+  int big_mushroom = 0;
+};
+
+const DecorParams& decor_params(BiomeId id);
+
+enum class TreeKind { Normal, Big, Forest, Swamp, Taiga1, Taiga2 };
+
+// Mirrors BiomeGenBase.getRandomWorldGenForTrees (+ overrides), including
+// the exact draw sequences per biome.
+TreeKind pick_tree(BiomeId id, JavaRandom& rand);
 
 }  // namespace craftpp::world

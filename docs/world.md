@@ -55,24 +55,32 @@ kept in `/tmp` (never committed).
   `Arrays.hashCode` over 8 chunks + all 32768 bytes of one chunk, from real
   OpenJDK — identical.
 
-## Carvers & features (M3c, in progress)
+## Carvers & features (M3c, done)
 
 - `region.hpp/cpp` — `RegionWorld`: multi-chunk id+metadata store,
   `top_solid_or_liquid` and `height_value` replicating the exact scans,
-  fresh-world mini-skylight (`15 − opacity above`) for placement checks.
+  fresh-world mini-skylight (`15 − opacity above`) for placement checks,
+  install-time frozen skylight (`saved_sky`, for plant stay-checks),
+  `setBlockID` parity (early-out, meta zeroing) and leaves-removal marking
+  (`|8` in 3×3×3, `checkChunksExist` guard).
 - `mapgen.hpp/cpp` — `MapGenCaves`/`MapGenRavine`: neighbor-range carving
   with per-neighbor seeding, full node paths (bifurcations, large nodes,
-  water abort, lava depth, grass-top fixup via biome lookup).   Tests pass for
-  the covered chunks; one open fixup-boundary bug remains (see
-  `docs/known-issues.md`).
+  water abort, lava depth, sticky grass-top fixup via biome lookup).
+  Validated byte-identical over 7×7 carved chunks.
+- `fluid.hpp/cpp` — `FluidSim`: immediate-mode 1.0 fluid sim for
+  `WorldGenLiquids` springs (`BlockFlowing.updateTick` + harden/convert +
+  sand fall + `editingBlocks` + still-vs-moving dispatch + schedule-only-
+  moving + shared `isOptimalFlowDirection` clobbering). Nested ticks draw
+  `World.rand` (pinned to 0 in tests, like the fixed-seed harness).
 - `worldgen.hpp/cpp` — `FeatureGen`: all `WorldGen*` (ores, sand/clay
-  patches, 6 tree types incl. persistent `BigTree` state, big mushrooms,
-  flowers/grass/bushes/reeds/cacti/pumpkins/lilies, lakes, dungeons with
-  loot-draw replication, liquid-spring placement), `decorate()` (full
-  `decorate_do` order minus fluid spread), `populate_chunk()` (populate
-  seeding, lakes, dungeons, biome-at-corner+16, ice/snow cap).
-  Validation via `test_populate` (5 sites × 3×3 chunks) is still failing —
-  see known issues.
+  patches, 6 tree types incl. persistent global `BigTree.heightLimit`,
+  big mushrooms, flowers/grass/bushes (deadbush soil = sand only)/
+  reeds/cacti/pumpkins/lilies, lakes, dungeons with loot-draw replication,
+  liquid springs with spread), `decorate()` (full `decorate_do` order),
+  `populate_chunk()` (populate seeding, lakes, dungeons, biome-at-corner+16,
+  ice/snow cap). WithNotify placements (vines/dungeons/ice-snow) notify via
+  `FluidSim`. Validated cell-for-cell on 5 sites × 3×3 (1 documented cell).
+  `populate_chunk` takes the shared `World.rand` stream.
 
 Deferred to later milestones: fluid spread (M5 fluid sim), spawner entities
 (M4/M5), structures/mineshafts/villages/strongholds (M5), skylight engine

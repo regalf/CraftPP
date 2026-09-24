@@ -13,12 +13,12 @@ indistinguishable from the original Java client (singleplayer first, vanilla
 | M2 chunk rendering (mesher, shaders, fog, frustum) | done, committed `115b092` | screenshot verified |
 | M3a GenLayer stack + biomes | done, committed `c35395a` | 6720 biome ints vs OpenJDK |
 | M3b noise + terrain + surface | done, committed `c35395a` | heightmaps + full 32 KB chunk bytes vs OpenJDK |
-| M3c caves/ravines | **nearly done, 1 failing chunk** | see `docs/known-issues.md` |
-| M3c decorator (ores/trees/plants/lakes/dungeons) | implemented, **not yet validated** | `test_populate` fails, see known issues |
+| M3c caves/ravines | **done** | 7×7 carved base byte-identical, see `known-issues.md` F6 |
+| M3c decorator + populate | **done (1 documented cell)** | 5 sites × 3×3 bit-identical vs engine oracle; 17868/17870 assertions (M5 light gap) |
 | M4+ | not started | — |
 
-Current test totals: ~17 900 assertions, all green except `test_populate`
-(decorator validation) and one `test_mapgen` chunk hash (cave fixup bug).
+Current test totals: 17870 assertions, 17868 green; the 2 failures are one
+documented cell (M5 light-engine gap, true Java golden kept).
 
 ## Architecture (target)
 

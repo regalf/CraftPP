@@ -50,75 +50,64 @@
 - Forgetting that `GenLayer` returns oversized `IntCache` arrays (only the
   first `w*h` entries are valid).
 
-## OPEN BUG 1 — cave grass-top fixup divergence (M3c blocker)
+## OPEN BUG 1 — cave grass-top fixup divergence (M3c blocker) — FIXED
 
-- **Status**: under investigation. Narrowed to a single mechanism, root
-  cause not yet proven.
-- **Symptom**: carved base differs from Java in 4 of 49 tested chunks
-  (seed 1: `(-2,0)`, `(-2,1)`, `(-1,0)`, `(1,0)`). Example: chunk `(-1,0)`,
-  cell `(8,60,1)` — Java writes grass via the cave grass-top fixup, the
-  port leaves dirt. Other diffs are the same signature (stone↔dirt at
-  carve fringes, e.g. `(2..3,26..35,5..6)`).
-- **What is proven identical** (differential tests, all green):
-  - cave spawn sets (neighbor, count, positions, sizes, node seeds — 98–129
-    caves per target, exact match);
-  - single-node carves on synthetic content (normal, large, bifurcating,
-    water-abort, lava-depth, grass-fixup configurations);
-  - node trajectories bit-exact over dozens of iterations (positions,
-    widths, heights, `% .9f` / integer bit patterns);
-  - width profiles, sin table (all 65536 entries), RNG streams.
-- **Leading hypothesis**: an evaluation-order-style draw bug in a rarely
-  hit branch (large-node entry? `thin` flag path? distance-cull edge?) that
-  shifts one node's path by ~1 ulp, flipping an ellipsoid-boundary
-  decision (`nx²+ny²+nz² < 1.0`) and cascading through order-dependent
-  carve/fixup interactions. The `(8,60,1)` case analysis shows the two runs
-  must have diverged *before* iteration 80 of the responsible node.
-- **Alternative hypothesis**: a biome-lookup difference at fixup coordinates
-  (`biome_top_at` uses direct voronoi; Java uses `BiomeCache` — values
-  should be equal but negative-coordinate regions are less tested).
-- **Next steps**:
-  1. Chronological per-write diff already built (`W` logs both sides);
-     attribute the first diverging write to its node (NODE + trajectory
-     logs exist) instead of comparing by `(start, ...)` counters, which
-     repeat across nodes.
-  2. Re-audit `recursive_generate` and the large-node entry for multi-draw
-     expressions (rule F1) — especially `nextInt(nextInt(120)+8)` nesting
-     (forced order, safe) vs any remaining same-expression siblings.
-  3. Extend isolated node tests with large-node + negative-coordinate
-     starts (current isolation tests all start inside 0..16, positive).
-  4. If the trigger is a 1-ulp libm difference (`sqrt`/`pow` in BigTree
-     paths don't apply here; `log` in gaussian — N/A), pin it with a
-     bit-level trajectory diff of the *responsible* node (identified in
-     step 1), not of convenient ones.
+- **Root cause** (proven via chronological N/T/W/F logs on both sides):
+  `var49` in `MapGenCaves.generateCaveNode` is declared per-column OUTSIDE
+  the y loop and never reset — once grass is seen above in the same column
+  scan, dirt carved below gets the biome top block even if the carved cell
+  itself is dirt. The port reset it per cell. One-line fix (hoist out of the
+  loop) in `cave_node` + the identical `var48` in `ravine_node`.
+- **Proof**: full 7x7 carved base byte-identical to Java afterwards.
+- Lesson: transcribe loop-carried flags with their exact scope; a flag that
+  looks "per iteration" may be sticky by declaration placement.
 
-## OPEN ISSUE 2 — populate/decorator validation (M3c second half)
+## OPEN ISSUE 2 — populate/decorator validation (M3c second half) — FIXED
 
-- **Status**: implemented, never green. `test_populate` (5 sites × 3×3
-  chunks: taiga/desert/forest/swamp/plains around seed 1) fails ~875
-  assertions, starting with tree-height stripes (e.g. tops 65 vs 63 in full
-  rows — classic wrong/missing-tree signature) and meta-hash mismatches.
-- **Causes** (to be separated once Bug 1 is fixed):
-  1. The 4 bad base chunks above poison everything downstream (trees read
-     heights, ores read stone, etc.).
-  2. Genuine decorator bugs not yet hunted (tree variants, ore
-     placement, lakes, dungeons, reed/cactus gates). Note the port
-     already encodes several verified subtleties (taiga2 radius/state
-     machine, corner-draw short-circuit, dungeon loot-draw replication with
-     TileEntityChest size 27, mushroom light rule, pumpkin/reed/cactus
-     stay-vs-place distinction).
-  3. Test-harness risk: `GenPopulate` replicates `populate`+`decorate_do`
-     manually (skipping spawner entities, ice/snow is *included*, fluid
-     *spread* excluded); the real engine's lazy chunk-load cascade
-     (`populateChunk`) is bypassed via pre-loading + `isTerrainPopulated`
-     pre-flagging. Any mismatch between this staging and the C++ test
-     driver (`build_site` in `test_populate.cpp`) shows up as diffs.
-- **Known accepted gaps** (documented, M4/M5): fluid *spread* after spring
-  placement (placement itself is replicated; `updateTick` can draw rand in
-  the lava-hardening path), spawner entities, structures
+- **Status**: done. `test_populate` (5 sites × 3×3 = 45 chunks, ~1.5M cells)
+  is bit-identical to the fixed-seed Java engine oracle except ONE
+  documented cell (M5 light-engine gap, below). Suite: 17868/17870.
+- **Method**: built a live engine oracle (`GenPopulate2`, /tmp only) driving
+  the REAL `ChunkProviderGenerate` pipeline stages on prebuilt chunks, then
+  fixed the port chunk-by-chunk in populate order with cell-level diffs.
+- **Bugs found via the oracle** (all fixed):
+  - F6 cave sticky fixup (above); F7 taiga1 `h1`/`top_r` derivation;
+    F8 lava-spring y draws (3 nested levels, not 2+const);
+    F9 leaves removal marking (`BlockLeaves.onBlockRemoval` 3×3×3 `|8`)
+    + `setBlockID` parity (zero meta, early-out);
+    F10 WithNotify placements (swamp vines, dungeon room/walls/chest/
+    spawner, ice/snow cap) must notify neighbors (fluid convert/harden);
+    F11 opaque leaves (`opaqueCubeLookup[18]`, fast graphics) in disc checks;
+    F12 still-water dispatch (must not run flow logic) + schedule only for
+    moving fluids (`BlockFluid.onBlockAdded` never schedules);
+    F13 shared `isOptimalFlowDirection`/`flowCost` members (nested ticks
+    clobber them — the fringe divergence);
+    F14 deadbush soil is sand-only; F15 BigTree `heightLimit` global
+    persistence; F16 lava `lightOpacity` 255.
+- **Harness findings** (documented, not port bugs):
+  - `World.rand` (`new Random()`) seeds nondeterministically per JVM; nested
+    fluid ticks draw it, so lava outcomes vary run-to-run. Goldens + C++
+    tests pin it to 0 (mechanism validated, samples reproducible).
+  - `SpawnerAnimals` is block-neutral and skipped on both sides (its
+    `World.rand` draws would otherwise need replication).
+- **Known accepted gaps** (unchanged, M4/M5): spawner entities, structures
   (mineshaft/village/stronghold), chest/spawner tile-entity contents.
-- **Next steps**: fix Bug 1 → re-run → triage remaining diffs per feature
-  (ores-only run, trees-only run) using the same isolate-and-compare ladder
-  as `docs/testing.md`.
+
+## OPEN ISSUE 3 — single-cell light-engine gap (M5, accepted)
+
+- **Status**: 1 cell in 45 populated chunks (~1.5M cells verified):
+  site (-32,20) chunk (-32,19) local (4,72,11) — tall grass Java lacks,
+  Craft++ grows. 2 assertions (`hash_bytes`, `hash_meta`) keep the true
+  Java golden with a KNOWN-GAP comment.
+- **Root cause** (proven with a light probe): Java's saved skylight there
+  is stale-low (7, pre-carve hill shade never relit — cave carve writes raw
+  arrays without relight, tree leaves below heightMap skip it) so
+  `canBlockStay` (light ≥ 8) fails. Craft++ uses live opacity (11).
+- **Fix (M5)**: synchronous light engine — `updateLightByType` BFS +
+  `relightBlock` heightMap maintenance on every write (currently only
+  `generateSkylightMap` at install + frozen skylight for plant checks).
+  Deliberately deferred: it touches every write path and risks the
+  currently-green mushroom/ice placements; M5 owns it per plan.md.
 
 ## Flaky JVM harness launches
 

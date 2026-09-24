@@ -44,4 +44,88 @@ const BiomeDef& biome_def_by_index(std::int32_t index) {
   return kBiomes[static_cast<std::size_t>(index)];
 }
 
+const DecorParams& decor_params(BiomeId id) {
+  static const DecorParams kDefault{};
+  static const DecorParams kPlains = [] {
+    DecorParams p;
+    p.trees = -999;
+    p.flowers = 4;
+    p.grass = 10;
+    return p;
+  }();
+  static const DecorParams kDesert = [] {
+    DecorParams p;
+    p.trees = -999;
+    p.dead_bush = 2;
+    p.reeds = 50;
+    p.cacti = 10;
+    return p;
+  }();
+  static const DecorParams kForest = [] {
+    DecorParams p;
+    p.trees = 10;
+    p.grass = 2;
+    return p;
+  }();
+  static const DecorParams kSwamp = [] {
+    DecorParams p;
+    p.trees = 2;
+    p.flowers = -999;
+    p.dead_bush = 1;
+    p.mushrooms = 8;
+    p.reeds = 10;
+    p.clay = 1;
+    p.waterlily = 4;
+    return p;
+  }();
+  static const DecorParams kTaiga = [] {
+    DecorParams p;
+    p.trees = 10;
+    p.grass = 1;
+    return p;
+  }();
+  static const DecorParams kMushroom = [] {
+    DecorParams p;
+    p.trees = -100;
+    p.flowers = -100;
+    p.grass = -100;
+    p.mushrooms = 1;
+    p.big_mushroom = 1;
+    return p;
+  }();
+  switch (id) {
+    case BiomeId::Plains:
+      return kPlains;
+    case BiomeId::Desert:
+      return kDesert;
+    case BiomeId::Forest:
+      return kForest;
+    case BiomeId::Swampland:
+      return kSwamp;
+    case BiomeId::Taiga:
+      return kTaiga;
+    case BiomeId::MushroomIsland:
+      return kMushroom;
+    default:
+      return kDefault;
+  }
+}
+
+TreeKind pick_tree(BiomeId id, JavaRandom& rand) {
+  switch (id) {
+    case BiomeId::Forest:
+      if (rand.next_int(5) == 0) return TreeKind::Forest;
+      if (rand.next_int(10) == 0) return TreeKind::Big;
+      return TreeKind::Normal;
+    case BiomeId::Swampland:
+      return TreeKind::Swamp;
+    case BiomeId::Taiga:
+      if (rand.next_int(3) == 0) return TreeKind::Taiga1;
+      return TreeKind::Taiga2;
+    default:
+      if (rand.next_int(10) == 0) return TreeKind::Big;
+      return TreeKind::Normal;
+  }
+}
+
 }  // namespace craftpp::world
