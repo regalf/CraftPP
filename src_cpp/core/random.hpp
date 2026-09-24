@@ -31,6 +31,9 @@ class JavaRandom {
   void next_bytes(std::vector<std::uint8_t>& out) { next_bytes(out.data(), out.size()); }
   double next_gaussian();
 
+  // Test hook: raw 48-bit LCG state (mirrors Random.seed for stream parity).
+  std::uint64_t raw_state() const { return seed_; }
+
  private:
   static constexpr std::uint64_t kMultiplier = 0x5DEECE66DULL;
   static constexpr std::uint64_t kAddend = 0xBULL;
