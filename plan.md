@@ -50,6 +50,29 @@ screenshots.
 seed as Java 1.0 yields same heightmap/trees/ores (automated diff on sampled
 chunks).
 
+Status: **in progress, split for sanity**.
+- M3a GenLayer stack + biomes — **done** (6720 ints vs OpenJDK).
+- M3b noise + terrain + surface — **done** (heightmaps + full chunk bytes).
+- M3c caves/ravines — **nearly done, 1 open bug** (see below).
+- M3c decorator (ores/trees/plants/lakes/dungeons) — implemented, validation
+  blocked on the open bug + untriaged. Details in `docs/world.md`.
+
+## Open bugs (M3c) — detail in `docs/known-issues.md`
+
+1. **Cave grass-top fixup divergence** (blocker): carved base differs from
+   Java in 4/49 tested chunks (seed 1: `(-2,0)`, `(-2,1)`, `(-1,0)`,
+   `(1,0)`), sparse single-cell diffs at carve fringes, e.g. `(8,60,1)`
+   grass-vs-dirt. Spawn sets, node trajectories, width profiles and
+   isolated node carves are all proven identical; the trigger is an
+   unproven ~1-ulp path difference or fixup-order interaction in one node.
+   Next: attribute the first diverging write to its node via the existing
+   chronological W-logs, then bit-level trajectory diff of that node.
+2. **Populate/decorator validation**: `test_populate` (5 sites × 3×3) fails
+   ~875 assertions (tree-height stripes, meta hashes). Partly poisoned by
+   bug 1 (bad base chunks), rest untriaged. Accepted gaps (M4/M5): fluid
+   spread after spring placement, spawner entities, structures, tile-entity
+   contents.
+
 ### M4 — Player physics + interaction
 `Entity`, `EntityLiving`, `EntityPlayerSP`, `PlayerController` (survival +
 creative), AABB collision, block break/place, day/night tick. Exit: walk/jump/
@@ -90,6 +113,18 @@ src_cpp/app/     MinecraftApp, GameSettings, save format, main loop
 tests/           Catch2 parity tests per milestone
 docs/            design notes
 ```
+
+## Porting rules (learned the hard way)
+
+1. **One RNG draw per statement.** Java evaluates strictly left-to-right;
+   C++ leaves argument/subexpression order unspecified. Hoist every draw into
+   a named temporary in source order (this caused real seed/size swaps in
+   cave bifurcations).
+2. **Wrapping arithmetic**: 64-bit seeds via `uint64_t`, 32-bit cell coords
+   via unsigned math + sign-preserving casts.
+3. **Read the decompiled source literally**: integer division truncation,
+   transposed indices, off-by-one frame indexing, and seemingly dead code
+   (e.g. ravine height from the *unjittered* width) are all load-bearing.
 
 ## Non-goals
 
