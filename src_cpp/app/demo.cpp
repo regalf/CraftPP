@@ -403,7 +403,7 @@ int main(int argc, char** argv) {
       last_y = my;
       have_mouse = true;
     }
-    yaw -= static_cast<float>(mx - last_x) * 0.15f;
+    yaw += static_cast<float>(mx - last_x) * 0.15f;  // mouse right looks right
     pitch += static_cast<float>(my - last_y) * 0.15f;  // mouse up (dy<0) looks up
     if (pitch < -90.0f) pitch = -90.0f;
     if (pitch > 90.0f) pitch = 90.0f;
