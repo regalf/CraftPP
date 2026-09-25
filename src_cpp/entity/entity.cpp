@@ -184,7 +184,7 @@ bool Entity::handle_lava_movement() {
 bool Entity::is_offset_in_liquid(double dx, double dy, double dz) {
   const Aabb moved = bbox.offset_copy(dx, dy, dz);
   std::vector<Aabb> hits;
-  colliding_boxes_for(world, collider, moved, hits);
+  colliding_boxes_for(world, world->collider(), moved, hits);
   if (!hits.empty()) return false;
   return !is_any_liquid(world, moved);
 }
@@ -354,7 +354,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
     constexpr double kStep = 0.05;
     while (dx != 0.0) {
       std::vector<Aabb> hits;
-      colliding_boxes_for(world, collider, bbox.offset_copy(dx, -1.0, 0.0), hits);
+      colliding_boxes_for(world, world->collider(), bbox.offset_copy(dx, -1.0, 0.0), hits);
       if (!hits.empty()) break;
       if (dx < kStep && dx >= -kStep) {
         dx = 0.0;
@@ -367,7 +367,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
     }
     while (dz != 0.0) {
       std::vector<Aabb> hits;
-      colliding_boxes_for(world, collider, bbox.offset_copy(0.0, -1.0, dz), hits);
+      colliding_boxes_for(world, world->collider(), bbox.offset_copy(0.0, -1.0, dz), hits);
       if (!hits.empty()) break;
       if (dz < kStep && dz >= -kStep) {
         dz = 0.0;
@@ -381,7 +381,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
   }
 
   std::vector<Aabb> hits;
-  colliding_boxes_for(world, collider, bbox.add_coord(dx, dy, dz), hits);
+  colliding_boxes_for(world, world->collider(), bbox.add_coord(dx, dy, dz), hits);
   for (const Aabb& b : hits) dy = b.clamp_y(bbox, dy);
   bbox.offset(0.0, dy, 0.0);
   if (!field_9293_aM && want_y != dy) {
@@ -408,7 +408,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
     const Aabb pre_step = bbox;
     bbox.set(start_box);
     std::vector<Aabb> step_hits;
-    colliding_boxes_for(world, collider, bbox.add_coord(dx, dy, dz), step_hits);
+    colliding_boxes_for(world, world->collider(), bbox.add_coord(dx, dy, dz), step_hits);
     for (const Aabb& b : step_hits) dy = b.clamp_y(bbox, dy);
     bbox.offset(0.0, dy, 0.0);
     if (!field_9293_aM && want_y != dy) {

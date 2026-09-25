@@ -10,7 +10,7 @@ namespace craftpp::entity {
 // All RNG draws still run in source order.
 class Living : public Entity {
  public:
-  explicit Living(EntityWorld* world) : Entity(world) {}
+  Living(EntityWorld* world);
 
   int health = max_health();
   int prev_health = 0;
@@ -45,21 +45,29 @@ class Living : public Entity {
   float prev_anim_speed = 0.0f;  // field_705_Q
   float default_pitch = 0.0f;
   bool is_multiplayer_entity = false;
+  float render_wobble_a = 0.0f;  // field_9363_r (render only, global-random)
+  float render_wobble_b = 0.0f;  // field_9365_p (render only, global-random)
 
   virtual int max_health() const { return 20; }
   float eye_height() const override { return height * 0.85f; }  // NOT 1.62 (player differs)
 
   void on_update() override;
   void on_entity_update() override;
-  void on_living_update();
+  virtual   void on_living_update();
   virtual void update_entity_action_state();
-  void move_entity_with_heading(float strafe, float forward);
+  virtual void move_entity_with_heading(float strafe, float forward);
   void fall(float distance) override;
   bool attack(DamageSource src, int amount) override;
+  // Full Living.attackEntityFrom with an explicit attacker (null for
+  // environmental damage). Player melee passes the player (knockback path).
+  virtual bool attack_ex(DamageSource src, int amount, Entity* attacker);
   void knock_back(Entity& attacker, int amount, double dx, double dz);
   void heal(int amount);
   int get_entity_health() const { return health; }
-  void set_entity_health(int v);
+  void set_entity_health(int v) {
+    health = v;
+    if (v > max_health()) v = max_health();  // source quirk: clamped local is discarded
+  }
   bool is_entity_alive() const { return !is_dead && health > 0; }
   bool is_on_ladder() const;
   void set_position_and_rotation2(double x, double y, double z, float yaw, float pitch, int steps);
@@ -81,6 +89,7 @@ class Living : public Entity {
   virtual float speed_factor() const { return 1.0f; }  // func_35166_t_ (potions M5)
   virtual bool can_breathe_underwater() const { return false; }
   virtual bool is_potion_active(int id) const { return false; }  // M5
+  virtual int armor_points() const { return 0; }  // func_40119_ar (player: armor)
   virtual int get_drop_item_id() const { return 0; }             // M5 drops
   virtual void on_entity_death() {}
   virtual void on_death(DamageSource src);
@@ -90,7 +99,21 @@ class Living : public Entity {
   virtual const char* living_sound() const { return nullptr; }
   virtual int talk_interval() const { return 80; }
   virtual void jump();
-  void damage_entity(DamageSource src, int amount);
+  virtual void damage_entity(DamageSource src, int amount);
+  // setDamageBypassesArmor sources skip the armor formula (func_40115_d).
+  static bool bypasses_armor(DamageSource src) {
+    return src == DamageSource::kOnFire || src == DamageSource::kInWall ||
+           src == DamageSource::kDrown || src == DamageSource::kFall;
+  }
+  // Hunger cost of damage (setDamageBypassesArmor zeroes it).
+  static float hunger_damage(DamageSource src) { return bypasses_armor(src) ? 0.0f : 0.3f; }
+  // Shared armor formula (func_40115_d) with the carry accumulator.
+  int apply_armor(int amount) {
+    const int keep = 25 - armor_points();
+    const int scaled = amount * keep + armor_carry;
+    armor_carry = scaled % 25;
+    return scaled / 25;
+  }
   float hurt_pitch();  // draws rand (non-const)
   void update_potion_effects();
 };

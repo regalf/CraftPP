@@ -17,11 +17,18 @@ JavaRandom& math_random() {
   return r;
 }
 
+constexpr float kPiFloat = 3.14159265358979323846f;  // (float)Math.PI
+
 }  // namespace
 
-void Living::set_entity_health(int v) {
-  health = v;
-  if (v > max_health()) health = max_health();
+Living::Living(EntityWorld* world) : Entity(world) {
+  prevent_spawning = true;
+  render_wobble_a = static_cast<float>(math_random().next_double() + 1.0) * 0.01f;
+  set_position(pos_x, pos_y, pos_z);
+  render_wobble_b = static_cast<float>(math_random().next_double()) * 12398.0f;
+  rotation_yaw =
+      static_cast<float>(math_random().next_double() * static_cast<double>(kPiFloat) * 2.0);
+  step_height = 0.5f;
 }
 
 void Living::heal(int amount) {
@@ -33,8 +40,7 @@ void Living::heal(int amount) {
 }
 
 void Living::set_position_and_rotation2(double x, double y, double z, float yaw, float pitch,
-                                        int steps) {
-  y_offset = 0.0f;
+                                        int steps) {  y_offset = 0.0f;
   new_pos_x = x;
   new_pos_y = y;
   new_pos_z = z;
@@ -170,7 +176,9 @@ float Living::hurt_pitch() {
   return (rand.next_float() - rand.next_float()) * 0.2f + 1.0f;
 }
 
-bool Living::attack(DamageSource src, int amount) {
+bool Living::attack(DamageSource src, int amount) { return attack_ex(src, amount, nullptr); }
+
+bool Living::attack_ex(DamageSource src, int amount, Entity* attacker) {
   if (world->multiplayer()) return false;
   entity_age = 0;
   if (health <= 0) return false;
@@ -193,9 +201,22 @@ bool Living::attack(DamageSource src, int amount) {
   if (full_hurt) {
     world->set_entity_state(*this, 2);
     set_been_attacked();
-    // Attacker knockback (entity-carrying DamageSource) is M5; environmental
-    // sources only jitter the cosmetic attackedAtYaw via global Math.random.
-    attacked_at_yaw = static_cast<float>(static_cast<int>(math_random().next_double() * 2.0) * 180);
+    if (attacker != nullptr) {
+      // Knockback jitter (only draws when entities overlap).
+      double kx = attacker->pos_x - pos_x;
+      double kz = attacker->pos_z - pos_z;
+      while (kx * kx + kz * kz < 1.0e-4) {
+        kx = (math_random().next_double() - math_random().next_double()) * 0.01;
+        kz = (math_random().next_double() - math_random().next_double()) * 0.01;
+      }
+      attacked_at_yaw = static_cast<float>(std::atan2(kz, kx) * 180.0 /
+                                           static_cast<double>(kPiFloat)) -
+                        rotation_yaw;
+      knock_back(*attacker, amount, kx, kz);
+    } else {
+      // Cosmetic jitter via global Math.random (never asserted in tests).
+      attacked_at_yaw = static_cast<float>(static_cast<int>(math_random().next_double() * 2.0) * 180);
+    }
   }
   if (health <= 0) {
     if (full_hurt) world->play_sound(death_sound(), get_sound_volume(), hurt_pitch());
@@ -207,12 +228,13 @@ bool Living::attack(DamageSource src, int amount) {
 }
 
 void Living::damage_entity(DamageSource src, int amount) {
-  // func_40115_d (armor, func_40119_ar()=0 base): amount*25+carry over 25
-  // reproduces amount exactly; func_40128_b (resistance): no potion.
-  const int scaled = amount * 25 + armor_carry;
-  amount = scaled / 25;
-  armor_carry = scaled % 25;
-  health -= amount;
+  // func_40115_d (armor, skipped when unblockable) + func_40128_b
+  // (resistance, no potion in M4).
+  if (bypasses_armor(src)) {
+    health -= amount;
+    return;
+  }
+  health -= apply_armor(amount);
 }
 
 void Living::knock_back(Entity& attacker, int amount, double dx, double dz) {
@@ -358,7 +380,7 @@ void Living::on_living_update() {
     set_rotation(rotation_yaw, rotation_pitch);
     std::vector<Aabb> hits;
     // contract(1/32) query mirrors the MP interp push-out.
-    colliding_boxes_for(world, collider, bbox.contract(1.0 / 32.0, 0.0, 1.0 / 32.0), hits);
+    colliding_boxes_for(world, world->collider(), bbox.contract(1.0 / 32.0, 0.0, 1.0 / 32.0), hits);
     if (!hits.empty()) {
       double lift = 0.0;
       for (const Aabb& b : hits)

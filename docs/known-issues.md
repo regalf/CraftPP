@@ -109,6 +109,70 @@
   Deliberately deferred: it touches every write path and risks the
   currently-green mushroom/ice placements; M5 owns it per plan.md.
 
+## Fixed bugs, M4 round (for the record)
+
+### F17. Sticky per-type block bounds (collision shapes)
+- Several `getCollidingBoundingBoxes` overrides mutate the shared Block
+  instance bounds (`setBlockBounds`) as a side effect, so the single-box
+  query returns leftovers of previous calls — PER BLOCK TYPE. Proven with
+  a probe: panes show leftovers, piston-extension ends with a trailing
+  full-cube reset (a `grep -A25` had cut it off), stairs/cauldron reset,
+  brewing ends item-bounds, end frame ends 13/16.
+- Fix: `BlockCollider` keeps sticky local bounds per id, updated at exactly
+  the source `setBlockBounds` points. 113 oracle CASEs green in order.
+
+### F18. Sneak-loop assigns want AFTER the body
+- Java assigns `var11 = var1` in the for-update slot. 0.3 − 6×0.05 leaves
+  1.4e-17 float dust, which the `< 0.05` threshold zeroes — Java's want
+  becomes 0.0, a pre-shrink assignment keeps 1.4e-17 (0.05 too far).
+
+### F19. Environmental hits must route through virtual attack()
+- `dealFireDamage`/`setOnFireFromLava`/fire-tick/cactus call
+  `this.attackEntityFrom` (the Living override with health logic), not a
+  world hook. Caught by lavaswim (fire=301, health untouched).
+
+### F20. Living eye height is height×0.85, heartsHalvesLife 20
+- Not 1.62 (that's nearer the player path, which uses yOffset 1.62 +
+  eye 0.12). Drown timing off by one tick otherwise.
+
+### F21. isInsideOfMaterial subtracts an extra 1/9
+- `var8 = heightPercent - 1/9`, surface = (y+1) − var8 (full height for
+  still water). Without it the swim air meter lags one tick.
+
+### F22. EntityPlayer overrides updateEntityActionState (swing only)
+- No super call: no entityAge++, no input zeroing, no rand draws. The
+  Living version must NOT run for players.
+
+### F23. Double armor application
+- `EntityPlayer.damageEntity` applies the armor formula, then calls
+  `super.damageEntity` which applies it AGAIN with the shared carry.
+  Unblockable (fall/drown/fire-tick/...) sources skip both.
+
+### F24. setEntityHealth clamps a discarded local
+- `this.health = var1` runs first; the `maxHealth` clamp applies to the
+  parameter copy. Overheal sticks (verified: hp=25).
+
+### F25. getCurrentPlayerStrVsBlock water/airborne ÷5 + movement exhaustion
+- Underwater (no aqua affinity) and airborne both divide strength by 5;
+  `EntityPlayer.moveEntityWithHeading` adds walk/swim/dive exhaustion per
+  tick. Sprint needs the +30% speed factors from `EntityPlayer.
+  onLivingUpdate` (missed at first).
+
+### F26. Tool ids in stacks are SHIFTED (+256)
+- Pickaxe tables keyed on raw ids (1,14,…) never match stack ids
+  (257,270,…). Caught by inspection before tests ran.
+
+### Harness findings (documented, not port bugs)
+- `Math.random()` (attackedAtYaw jitter, EntityItem motion/yaw, Living
+  ctor render fields) is wild per JVM run: never asserted.
+- `World.spawnParticle` draws `world.rand` (contained in particles, no
+  entity feedback); drop item motion/yaw likewise wild (position exact).
+- `EntityPlayerSP`/controllers need the Minecraft client: SP mc-free
+  methods + full `onLivingUpdate` run against hand-written client stubs
+  (real game code); controller glue is hand-replicated over real
+  Block/World calls. Both flagged oracle-assisted, behavior-tested.
+- Breaking piston-extension meta 6/7 crashes vanilla (`Facing` table).
+
 ## Flaky JVM harness launches
 
 `java -cp classes ... | grep/pipe` intermittently yields empty stdout.

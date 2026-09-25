@@ -79,6 +79,31 @@ Status: **done** (split for sanity, all verified differential vs OpenJDK).
 creative), AABB collision, block break/place, day/night tick. Exit: walk/jump/
 fall/mine/place feel identical at 20 TPS.
 
+Status: **done** (verified differential vs OpenJDK, suite 40482/40484 —
+the 2 failures are the known M5 light cell).
+- Entity base: full `moveEntity` (sneak edge, axis clamps, step-up,
+  fall-state, walk distance, web/soul/cactus hooks, burning box),
+  `onEntityUpdate` with all RNG draws, water push, lava, `moveFlying`.
+- Block collision shapes for all 122 ids incl. the shared-mutable-bounds
+  state machine (sticky per-type bounds, pane leftovers, piston-extension
+  trailing reset) + fluid flow vectors.
+- EntityLiving: `onUpdate` yaw interpolation, living `onEntityUpdate`
+  (sound draw, suffocation, drown air/bubbles, death branch), `moveEntity-
+  WithHeading` (water/lava/friction/slipperiness/ladder/auto-step),
+  jump (+sprint boost), fall damage, attack/health/armor (double armor
+  application), knockback, `updateEntityActionState`, movement-stat
+  exhaustion, `EntityPlayer.onLivingUpdate` (speed factors, camera).
+- PlayerSP: input glue, sprint state machine, push-out, portal timers,
+  fly toggle/motion/dismount, `setHealth` routing, eye 0.12 / yOffset 1.62.
+- Items/inventory: tool matrix (strength/harvest/durability/damage),
+  armor values, hardness table, drop tables, ItemBlock/ItemDoor placement,
+  orientation hooks, neighbor-pop cascade, door toggles.
+- Controllers: SP mining (damage accumulation, wait, retarget, drops,
+  durability) + placement, creative insta-break/countdown/no-consume.
+- Oracle-assisted (no client in headless JVM): SP `onLivingUpdate`,
+  controller glue — both transcribed line-by-line + behavior-tested.
+- Day/night tick deferred to M5 (needs the live World + light engine).
+
 ### M5 — Full singleplayer survival
 `TileEntity` (chest, furnace, signs), `Container/Slot` + crafting/furnace
 recipes, mobs + spawning, weather, `McRegion` save/load, `GuiMainMenu/Ingame/

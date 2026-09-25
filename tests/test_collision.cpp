@@ -25,6 +25,8 @@ using craftpp::world::BlockCollider;
 using craftpp::world::BlockView;
 
 struct MapView : BlockView {
+  BlockCollider shared_collider;
+  BlockCollider& collider() { return shared_collider; }
   std::unordered_map<long, int> ids;
   std::unordered_map<long, int> metas;
   static long key(int x, int y, int z) {
@@ -73,7 +75,7 @@ TEST_CASE("collision shapes match Java oracle", "[collision]") {
   };
 
   MapView w;
-  BlockCollider col;
+  BlockCollider& col = w.collider();
   const Aabb ebox(7.9, 63.9, 7.9, 9.1, 66.1, 9.1);
   size_t idx = 0;
   auto check = [&](const std::string& name, int id, int meta) {

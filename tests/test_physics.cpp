@@ -13,13 +13,16 @@
 #include <unordered_map>
 #include <vector>
 
+#include "core/random.hpp"
 #include "entity/entity.hpp"
 
 namespace {
 
 using craftpp::entity::DamageSource;
+using craftpp::JavaRandom;
 using craftpp::entity::Entity;
 using craftpp::entity::EntityWorld;
+using craftpp::world::BlockCollider;
 
 struct TestWorld : EntityWorld {
   std::unordered_map<long, int> ids;
@@ -46,6 +49,10 @@ struct TestWorld : EntityWorld {
     return it == metas.end() ? 0 : it->second;
   }
   bool chunks_exist(int, int, int, int, int, int) const override { return true; }
+  BlockCollider shared_collider;
+  BlockCollider& collider() override { return shared_collider; }
+  JavaRandom wrand;
+  JavaRandom& world_rand() override { return wrand; }
 
   struct Hit {
     std::string scen;

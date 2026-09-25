@@ -17,6 +17,7 @@ enum class DamageSource {
   kInWall,   // inWall (suffocation)
   kDrown,    // drown (no air)
   kFall,     // fall (impact)
+  kPlayer,   // causePlayerDamage (carries the attacker via attack_ex)
 };
 
 // World services an Entity needs. The M4 test world implements this over a
@@ -45,6 +46,12 @@ class EntityWorld : public world::BlockView {
   virtual std::vector<Entity*> entities_excluding(const Entity& e, const Aabb& box) {
     return {};
   }
+  // World.rand equivalent (unbreaking rolls, drop rolls). Owned by the world.
+  virtual JavaRandom& world_rand() = 0;
+  // Shared sticky block-bounds state (mirrors the JVM-global Block statics;
+  // per-world here so worlds stay independent). Entity movement AND block
+  // placement MUST use this one instance, or the single-box reads diverge.
+  virtual world::BlockCollider& collider() = 0;
 };
 
 // Block-part of World.getCollidingBoundingBoxes (entity-entity part is M5;
@@ -96,12 +103,12 @@ class Entity {
   bool is_immune_to_fire = false;
   bool is_air_borne = false;
   bool been_attacked = false;
+  bool prevent_spawning = false;  // preventEntitySpawning (mobs set true)
   JavaRandom rand;
 
   int entity_id = 0;
 
   EntityWorld* world = nullptr;
-  world::BlockCollider collider;  // sticky per-type bounds, like Block statics
 
   void set_size(float w, float h) {
     width = w;
@@ -112,10 +119,10 @@ class Entity {
   void set_position_and_rotation(double x, double y, double z, float yaw, float pitch);
   void set_location_and_angles(double x, double y, double z, float yaw, float pitch);
 
-  bool is_sneaking() const { return flag_sneak; }
+  virtual bool is_sneaking() const { return flag_sneak; }
   bool is_sprinting() const { return flag_sprint; }
   void set_sneaking(bool v) { flag_sneak = v; }
-  void set_sprinting(bool v) { flag_sprint = v; }
+  virtual void set_sprinting(bool v) { flag_sprint = v; }
 
   void set_entity_dead() { is_dead = true; }
 
@@ -142,6 +149,12 @@ class Entity {
   }
   void set_been_attacked() { been_attacked = true; }
   void extinguish() { fire = 0; }  // func_40045_B
+  void add_velocity(double dx, double dy, double dz) {
+    motion_x += dx;
+    motion_y += dy;
+    motion_z += dz;
+    is_air_borne = true;
+  }
   bool is_inside_opaque_block() const;  // Entity.java (8 eye samples)
 
  protected:
