@@ -39,7 +39,7 @@ A throwaway playable demo (`craftpp_demo`) walks real terrain.
   attach Mojang code, jars, or assets. Such contributions will be rejected and
   removed.
 
-See also the pinned `LEGAL NOTICE` issue on GitHub, which restates this notice.
+See also the `LEGAL_NOTICE.md` which restates this notice.
 
 ## License
 
