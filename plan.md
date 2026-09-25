@@ -106,6 +106,9 @@ the 2 failures are the known M5 light cell).
 - Throwaway demo: `craftpp_demo` (WASD/mouse/Space/Shift, LMB mine,
   RMB place stone, ESC quit) on 3×3 generated chunks with real physics.
   Wiring only — picking is full-cube, placing is stone-only, no HUD/mobs.
+  Movement is basic and slightly choppy by design; the real implementation
+  (menus, keybinding wiring, options, smooth input handling, sprint/fly
+  keys, inventory keys, GameSettings) lands with the proper client in M5+.
 
 ### M5 — Full singleplayer survival
 `TileEntity` (chest, furnace, signs), `Container/Slot` + crafting/furnace
