@@ -57,6 +57,12 @@ add_executable(craftpp
 )
 target_link_libraries(craftpp PRIVATE craftpp_core glfw OpenGL::GL)
 
+# ---- M4 throwaway playable demo (wiring only; will be redone) ----
+add_executable(craftpp_demo
+  src_cpp/app/demo.cpp
+)
+target_link_libraries(craftpp_demo PRIVATE craftpp_core glfw OpenGL::GL)
+
 # ---- tests ----
 include(CTest)
 include(Catch)

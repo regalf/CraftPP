@@ -103,6 +103,9 @@ the 2 failures are the known M5 light cell).
 - Oracle-assisted (no client in headless JVM): SP `onLivingUpdate`,
   controller glue — both transcribed line-by-line + behavior-tested.
 - Day/night tick deferred to M5 (needs the live World + light engine).
+- Throwaway demo: `craftpp_demo` (WASD/mouse/Space/Shift, LMB mine,
+  RMB place stone, ESC quit) on 3×3 generated chunks with real physics.
+  Wiring only — picking is full-cube, placing is stone-only, no HUD/mobs.
 
 ### M5 — Full singleplayer survival
 `TileEntity` (chest, furnace, signs), `Container/Slot` + crafting/furnace
