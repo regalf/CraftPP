@@ -10,11 +10,10 @@ namespace {
 
 int g_next_entity_id = 0;
 
-// Mirrors World.getCollidingBoundingBoxes (block part only). The source also
-// appends other-entity boxes; M4 runs single-entity (getBoundingBox() is null
-// for the base class anyway), the M5 World adds that part.
-void world_colliding_boxes(EntityWorld* w, world::BlockCollider& collider, const Aabb& box,
-                           std::vector<Aabb>& out) {
+}  // namespace
+
+void colliding_boxes_for(EntityWorld* w, world::BlockCollider& collider, const Aabb& box,
+                         std::vector<Aabb>& out) {
   const int x0 = MathHelper::floor_double(box.min_x);
   const int x1 = MathHelper::floor_double(box.max_x + 1.0);
   const int y0 = MathHelper::floor_double(box.min_y);
@@ -125,8 +124,6 @@ bool is_box_burning(EntityWorld* w, const Aabb& box) {
   return false;
 }
 
-}  // namespace
-
 Entity::Entity(EntityWorld* w) : world(w), entity_id(g_next_entity_id++) {
   set_position(0.0, 0.0, 0.0);
 }
@@ -187,7 +184,7 @@ bool Entity::handle_lava_movement() {
 bool Entity::is_offset_in_liquid(double dx, double dy, double dz) {
   const Aabb moved = bbox.offset_copy(dx, dy, dz);
   std::vector<Aabb> hits;
-  world_colliding_boxes(world, collider, moved, hits);
+  colliding_boxes_for(world, collider, moved, hits);
   if (!hits.empty()) return false;
   return !is_any_liquid(world, moved);
 }
@@ -199,9 +196,23 @@ bool Entity::is_inside_of_material_water() const {
   const int z = MathHelper::floor_double(pos_z);
   const int id = world->block_id(x, y, z);
   if ((id == world::bid::kWaterMoving || id == world::bid::kWaterStill)) {
-    const float surface =
-        static_cast<float>(y + 1) - world::fluid_height_percent(world->block_meta(x, y, z));
+    // Mirrors isInsideOfMaterial exactly (extra -1/9 on the height percent).
+    const float var8 = world::fluid_height_percent(world->block_meta(x, y, z)) - 1.0f / 9.0f;
+    const float surface = static_cast<float>(y + 1) - var8;
     return eye < surface;
+  }
+  return false;
+}
+
+bool Entity::is_inside_opaque_block() const {
+  for (int i = 0; i < 8; ++i) {
+    const float ox = (static_cast<float>((i >> 0) % 2) - 0.5f) * width * 0.8f;
+    const float oy = (static_cast<float>((i >> 1) % 2) - 0.5f) * 0.1f;
+    const float oz = (static_cast<float>((i >> 2) % 2) - 0.5f) * width * 0.8f;
+    const int bx = MathHelper::floor_double(pos_x + ox);
+    const int by = MathHelper::floor_double(pos_y + eye_height() + oy);
+    const int bz = MathHelper::floor_double(pos_z + oz);
+    if (world::bid::is_normal_cube(world->block_id(bx, by, bz))) return true;
   }
   return false;
 }
@@ -233,12 +244,12 @@ void Entity::update_fall_state(double dy, bool grounded) {
 }
 
 void Entity::deal_fire_damage(int amount) {
-  if (!is_immune_to_fire) world->attack_entity_from(DamageSource::kInFire, amount);
+  if (!is_immune_to_fire) attack(DamageSource::kInFire, amount);
 }
 
 void Entity::set_on_fire_from_lava() {
   if (!is_immune_to_fire) {
-    world->attack_entity_from(DamageSource::kLava, 4);
+    attack(DamageSource::kLava, 4);
     const int ticks = 15 * 20;
     if (fire < ticks) fire = ticks;
   }
@@ -300,7 +311,7 @@ void Entity::on_entity_update() {
       fire -= 4;
       if (fire < 0) fire = 0;
     } else {
-      if (fire % 20 == 0) world->attack_entity_from(DamageSource::kOnFire, 1);
+      if (fire % 20 == 0) attack(DamageSource::kOnFire, 1);
       --fire;
     }
   }
@@ -330,7 +341,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
   if (is_in_web) {
     is_in_web = false;
     dx *= 0.25;
-    dy *= 0.05;
+    dy *= static_cast<double>(0.05f);
     dz *= 0.25;
     motion_x = 0.0;
     motion_y = 0.0;
@@ -343,7 +354,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
     constexpr double kStep = 0.05;
     while (dx != 0.0) {
       std::vector<Aabb> hits;
-      world_colliding_boxes(world, collider, bbox.offset_copy(dx, -1.0, 0.0), hits);
+      colliding_boxes_for(world, collider, bbox.offset_copy(dx, -1.0, 0.0), hits);
       if (!hits.empty()) break;
       if (dx < kStep && dx >= -kStep) {
         dx = 0.0;
@@ -356,7 +367,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
     }
     while (dz != 0.0) {
       std::vector<Aabb> hits;
-      world_colliding_boxes(world, collider, bbox.offset_copy(0.0, -1.0, dz), hits);
+      colliding_boxes_for(world, collider, bbox.offset_copy(0.0, -1.0, dz), hits);
       if (!hits.empty()) break;
       if (dz < kStep && dz >= -kStep) {
         dz = 0.0;
@@ -370,7 +381,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
   }
 
   std::vector<Aabb> hits;
-  world_colliding_boxes(world, collider, bbox.add_coord(dx, dy, dz), hits);
+  colliding_boxes_for(world, collider, bbox.add_coord(dx, dy, dz), hits);
   for (const Aabb& b : hits) dy = b.clamp_y(bbox, dy);
   bbox.offset(0.0, dy, 0.0);
   if (!field_9293_aM && want_y != dy) {
@@ -397,7 +408,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
     const Aabb pre_step = bbox;
     bbox.set(start_box);
     std::vector<Aabb> step_hits;
-    world_colliding_boxes(world, collider, bbox.add_coord(dx, dy, dz), step_hits);
+    colliding_boxes_for(world, collider, bbox.add_coord(dx, dy, dz), step_hits);
     for (const Aabb& b : step_hits) dy = b.clamp_y(bbox, dy);
     bbox.offset(0.0, dy, 0.0);
     if (!field_9293_aM && want_y != dy) {
@@ -478,7 +489,7 @@ void Entity::move_entity(double dx, double dy, double dz) {
             motion_x *= 0.4;
             motion_z *= 0.4;
           } else if (id == world::bid::kCactus) {
-            world->attack_entity_from(DamageSource::kCactus, 1);
+            attack(DamageSource::kCactus, 1);
           } else if (id > 0) {
             world->on_entity_collided_cell(id, x, y, z);
           }

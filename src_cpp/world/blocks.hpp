@@ -267,6 +267,9 @@ inline int light_opacity(int id) {
   return is_opaque(id) ? 255 : 0;
 }
 
+// Mirrors Block.slipperiness (default 0.6; ice 0.98). Nothing else overrides.
+inline float block_slipperiness(int id) { return id == kIce ? 0.98f : 0.6f; }
+
 // Ground-cover materials for Block.canPlaceBlockAt (vine + snow cover).
 inline bool is_ground_cover(int id) { return id == kVine || id == kSnowCover; }
 

@@ -35,6 +35,7 @@ add_library(craftpp_core
   src_cpp/world/worldgen.cpp
   src_cpp/world/block_collision.cpp
   src_cpp/entity/entity.cpp
+  src_cpp/entity/living.cpp
   src_cpp/render/mesher.cpp
   src_cpp/render/frustum.cpp
   src_cpp/render/shader.cpp
@@ -66,6 +67,7 @@ add_executable(craftpp_tests
   tests/test_populate.cpp
   tests/test_collision.cpp
   tests/test_physics.cpp
+  tests/test_living.cpp
   tests/test_frustum.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)

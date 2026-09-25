@@ -14,12 +14,17 @@ enum class DamageSource {
   kOnFire,   // onFire (fire ticks)
   kLava,     // lava exposure
   kCactus,   // cactus contact
+  kInWall,   // inWall (suffocation)
+  kDrown,    // drown (no air)
+  kFall,     // fall (impact)
 };
 
 // World services an Entity needs. The M4 test world implements this over a
 // block map; the live World (M5) will implement it over chunks + entities.
 // Particle/sound hooks are no-ops in tests — but every RNG draw in Entity
 // code still runs (same order), so streams stay identical to Java.
+class Entity;  // fwd for world hooks
+
 class EntityWorld : public world::BlockView {
  public:
   virtual bool chunks_exist(int x0, int y0, int z0, int x1, int y1, int z1) const = 0;
@@ -35,7 +40,17 @@ class EntityWorld : public world::BlockView {
   // through attack_entity_from.
   virtual void on_entity_collided_cell(int block_id, int x, int y, int z) {}
   virtual void attack_entity_from(DamageSource src, int amount) {}
+  virtual void set_entity_state(Entity& e, int state) {}
+  virtual Entity* closest_player_to(const Entity& e, double max_dist) { return nullptr; }
+  virtual std::vector<Entity*> entities_excluding(const Entity& e, const Aabb& box) {
+    return {};
+  }
 };
+
+// Block-part of World.getCollidingBoundingBoxes (entity-entity part is M5;
+// the base getBoundingBox() is null anyway). Shared by Entity/Living.
+void colliding_boxes_for(EntityWorld* w, world::BlockCollider& collider, const Aabb& box,
+                         std::vector<Aabb>& out);
 
 // Base entity mirroring Entity.java (singleplayer-relevant subset; DataWatcher
 // flag bits 0/1/2/3 live as plain bools with identical observable behavior).
@@ -79,6 +94,8 @@ class Entity {
   bool is_in_web = false;
   bool first_update = true;
   bool is_immune_to_fire = false;
+  bool is_air_borne = false;
+  bool been_attacked = false;
   JavaRandom rand;
 
   int entity_id = 0;
@@ -103,7 +120,7 @@ class Entity {
   void set_entity_dead() { is_dead = true; }
 
   virtual void on_update() { on_entity_update(); }
-  void on_entity_update();
+  virtual void on_entity_update();
   void move_entity(double dx, double dy, double dz);
   void move_flying(float strafe, float forward, float friction);
   bool handle_water_movement();
@@ -115,6 +132,17 @@ class Entity {
   virtual float eye_height() const { return 0.0f; }
   virtual bool can_trigger_walking() const { return true; }
   virtual void fall(float distance) {}
+  // Mirrors Entity.attackEntityFrom (base: just sets beenAttacked). Living
+  // overrides with the health/armor/knockback logic. The world hook inside
+  // the base version exists so single-entity tests can log the call.
+  virtual bool attack(DamageSource src, int amount) {
+    world->attack_entity_from(src, amount);
+    set_been_attacked();
+    return false;
+  }
+  void set_been_attacked() { been_attacked = true; }
+  void extinguish() { fire = 0; }  // func_40045_B
+  bool is_inside_opaque_block() const;  // Entity.java (8 eye samples)
 
  protected:
   bool flag_burning = false;  // dataWatcher bit 0 (fire>0), cosmetic here
