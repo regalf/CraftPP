@@ -7,7 +7,10 @@ Target: a client that looks, feels and behaves like the original 1.0 client
 with a modern multithreaded engine (main tick / render / chunk-generation threads,
 OpenGL 3.3+, CMake).
 
-Status: early development.
+Status: M4 done — deterministic core, chunk rendering, Java-identical
+world generation, and bit-identical player physics + survival/creative
+block break/place (differential-tested against the 1.0 engine).
+A throwaway playable demo (`craftpp_demo`) walks real terrain.
 
 ## Legal notice — please read
 
@@ -56,12 +59,12 @@ this program (see `LICENSE`). If not, see <https://www.gnu.org/licenses/>.
 
 SPDX-License-Identifier: GPL-3.0-or-later
 
-## Layout (planned)
+## Layout
 
 ```text
 src_cpp/    # new C++20 sources (core, world, render, entity, gui, audio, net, app)
-tests/      # parity tests (JavaRandom, NBT, worldgen, protocol)
-docs/       # design notes
+tests/      # Catch2 parity tests (RNG, NBT, worldgen, physics, player)
+docs/       # design notes (overview, core/world/render/testing/known-issues)
 ```
 
 Local-only, never committed:
@@ -71,6 +74,18 @@ src/        # original Java reference (ignored)
 assets/     # user-supplied 1.0 assets for local testing (ignored)
 ```
 
-## Building (placeholder)
+## Building
 
-CMake + C++20 + GLFW + GLM + OpenAL will be documented once `M0` lands.
+Dependencies (Arch): `glfw`, `glad` (via `epoxy`), `glm`, `openal`,
+`zlib`, `stb` (bundled), `Catch2`, `cmake`, `ninja`, `gcc`.
+
+```sh
+cmake -S . -B build
+cmake --build build
+./build/craftpp_tests   # full parity suite (ctest also works)
+./build/craftpp [--assets DIR]  # M2 chunk renderer (needs your own
+                                # terrain.png under assets/, never committed)
+./build/craftpp_demo [--seed N]  # throwaway M4 demo: WASD/mouse,
+                                 # Space jump, Shift sneak, LMB mine,
+                                 # RMB place stone, ESC quit
+```
