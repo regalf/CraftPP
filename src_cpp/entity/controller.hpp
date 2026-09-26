@@ -46,6 +46,14 @@ class ControllerSP : public Controller {
 
   // Test introspection (mirrors the private damage state).
   float cur_damage() const { return cur_damage_; }
+  // Crack overlay (RenderGlobal destroy stages): current target + progress.
+  bool damage_target(int& x, int& y, int& z) const {
+    if (cur_damage_ <= 0.0f) return false;
+    x = cur_x;
+    y = cur_y;
+    z = cur_z;
+    return w.block_id(x, y, z) > 0;
+  }
 
  private:
   int cur_x = -1, cur_y = -1, cur_z = -1;

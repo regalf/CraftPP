@@ -91,7 +91,33 @@ bool pick_block(LiveWorld& w, double ex, double ey, double ez, double dx, double
   return false;
 }
 
-// Flat-shaded box helper for entities (winding CCW front; culling stays off).
+// Crack overlay cube (destroy stages 240-249): slightly expanded to win
+// depth against the block faces, full texture on all 6 sides.
+void add_crack_cube(craftpp::render::Mesh& m, int x, int y, int z, int tile) {
+  const float e = 0.01F;
+  const float x0 = x - e, x1 = x + 1 + e;
+  const float y0 = y - e, y1 = y + 1 + e;
+  const float z0 = z - e, z1 = z + 1 + e;
+  const float tx = static_cast<float>((tile & 15) * 16);
+  const float ty = static_cast<float>(tile & 240);
+  const float u0 = tx / 256.0F, u1 = (tx + 16.0F - 0.01F) / 256.0F;
+  const float v0 = ty / 256.0F, v1 = (ty + 16.0F - 0.01F) / 256.0F;
+  auto quad = [&](float ax, float ay, float az, float bx, float by, float bz, float cx, float cy,
+                  float cz, float dx, float dy, float dz) {
+    std::uint32_t base = static_cast<std::uint32_t>(m.vertices.size());
+    m.vertices.push_back({ax, ay, az, 1, 1, 1, u0, v1});
+    m.vertices.push_back({bx, by, bz, 1, 1, 1, u1, v1});
+    m.vertices.push_back({cx, cy, cz, 1, 1, 1, u1, v0});
+    m.vertices.push_back({dx, dy, dz, 1, 1, 1, u0, v0});
+    m.indices.insert(m.indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+  };
+  quad(x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0);  // top
+  quad(x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1);  // bottom
+  quad(x1, y1, z0, x0, y1, z0, x0, y0, z0, x1, y0, z0);  // -z
+  quad(x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, y0, z1);  // +z
+  quad(x0, y1, z1, x0, y1, z0, x0, y0, z0, x0, y0, z1);  // -x
+  quad(x1, y1, z0, x1, y1, z1, x1, y0, z1, x1, y0, z0);  // +x
+}
 void add_quad(craftpp::render::Mesh& m, float x0, float y0, float z0, float x1, float y1, float z1,
               float x2, float y2, float z2, float x3, float y3, float z3, float r, float g,
               float b) {
@@ -549,7 +575,20 @@ int main(int argc, char** argv) {
         if (frustum.box_visible(box)) tess.draw();
       }
 
-      // Mobs as textured code models (pig/zombie skins); drops stay boxes.
+      // Crack overlay while mining (destroy stages, terrain.png 240-249).
+      if (!creative) {
+        int tx = 0, ty = 0, tz = 0;
+        if (controller_sp.damage_target(tx, ty, tz)) {
+          int stage = static_cast<int>(controller_sp.cur_damage() * 10.0F);
+          if (stage < 0) stage = 0;
+          if (stage > 9) stage = 9;
+          craftpp::render::Mesh crack;
+          add_crack_cube(crack, tx, ty, tz, 240 + stage);
+          craftpp::render::Tessellator ctess;
+          ctess.upload(crack);
+          ctess.draw();
+        }
+      }
       glDisable(GL_CULL_FACE);  // entity meshes mirror X (winding flips)
       for (auto& m : world.mobs()) {
         if (!m || m->is_dead) continue;
