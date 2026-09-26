@@ -525,10 +525,15 @@ int main(int argc, char** argv) {
         ++tick_count;
         ++tps_ticks;
         if (tick_count % 20 == 0) {
-          char buf[160];
-          std::snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f onGround %d hp %d tps %.1f",
-                        player.pos_x, player.pos_y, player.pos_z, (int)player.on_ground,
-                        player.health, tps_ticks / (tps_window > 0.0 ? tps_window : 1.0));
+          // Cardinal facing from yaw (+z = south, +x = east, like vanilla F3).
+          int dir = static_cast<int>(std::floor(yaw / 90.0F + 0.5F)) % 4;
+          if (dir < 0) dir += 4;
+          const char* face = dir == 0 ? "S" : (dir == 1 ? "W" : (dir == 2 ? "N" : "E"));
+          char buf[192];
+          std::snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f face %s (%.0f) onGround %d hp %d tps %.1f",
+                        player.pos_x, player.pos_y, player.pos_z, face, yaw,
+                        (int)player.on_ground, player.health,
+                        tps_ticks / (tps_window > 0.0 ? tps_window : 1.0));
           craftpp::log_info(buf);
           tps_window = 0.0;
           tps_ticks = 0;
