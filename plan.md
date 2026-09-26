@@ -123,33 +123,62 @@ terrain+carve+populate+light chunks behind `EditWorld`, world time,
 entity registry at 20 TPS; demo migrated to it). **Day/night + random
 ticks done** (`world/tick.*`: celestial angle, skylight subtracted,
 grass spread/kill, leaves decay, ice melt, flower/mushroom pops, fire
-spread with a scheduled queue). Suite fully green, zero gaps. Next:
-TileEntity, mobs.
+spread with a scheduled queue). Suite fully green, zero gaps. **TileEntity
+done** (chest/furnace/sign + smelting + drops). **Drops/pickup done.**
+**Mobs done** (pig+zombie+spawn; wall-follow pending real paths).
+**Crafting done** (full table). **Creative done.** Demo is a playable
+survival slice (daylight, mob boxes, hotbar, held placing, G creative,
+fly double-tap, TPS meter, auto-respawn).
 
-### M5b — Streaming + multithread (dopo il singleplayer giocabile)
-Il mondo esce dal 3×3 fisso: chunk generati attorno al giocatore mentre
-cammina (provide on demand + unload oltre il raggio), e la generazione va
-off-thread perché non deve mai bloccare il tick.
+## Remaining M5 (dependency order — replan 2026-09-26)
 
-Ordine di split (uno alla volta, suite verde tra l'uno e l'altro):
-1. **ChunkGen/IO worker**: un `std::jthread` + coda jobs (richieste provide
-   per (cx,cz,seed)). Il worker genera terrain+carve+install+populate su
-   copie private e consegna il chunk pronto via `std::move`; il Main lo
-   installa e lo marca dirty per il remesh. Mai RNG condivisi (regola
-   architettura: un `JavaRandom` privato per job, seed `worldSeed ^ hash`).
-2. **Meshing off-thread**: CPU meshing sullo snapshot `16x16 + 1 bordo`
-   (mai sul chunk live), upload VBO sul thread Render.
-3. **Render split** (ultimo): context GL dedicato; il Main resta l'unico
-   writer del `World` con tick Java-identico a 20 TPS così una futura
-   sessione server non desynca.
+1. **McRegion save/load** — level.dat, entity/tile NBT, chunk dirty
+   tracking. Without it there is no "continue a saved game". Also
+   enables comparison against the vanilla 1.0 server
+   (`~/jars/minecraft_server.jar`).
+2. **GUI + menus** — main menu, HUD (hearts/food/hotbar), usable
+   inventory (crafting grid, furnace, chest), death screen, FontRenderer.
+   The inventory exists but is unusable without this.
+3. **Options/keybindings** — real GameSettings (remappable keys,
+   difficulty, render distance). Keys are currently hardcoded.
+4. **Weather** — rain/snow/thunderstorms (touches light, spawning,
+   lightning). Optional for "playable", needed for fidelity.
+5. **More mobs + real pathfinding** — skeleton (arrows),
+   spider/creeper, remaining animals. Pathfinding lands HERE with the
+   mobs that need it (so far: direct seek + wall-follow + single-step
+   hop). Includes entity render interpolation (current jerky feel
+   comes from raw 20 TPS drawing).
+6. **Mechanics leftovers** — food/stews/buckets/bow, full armor,
+   durability, redstone/rails, TNT, sleep/XP/riding/achievements,
+   enchanting, silverfish/ice.
 
-Resta single-thread finché non serve: tutto il lavoro M0–M5 (parità
-differenziale) richiede determinismo totale — l'ordine degli update
-luce/fisica deve essere riproducibile al 100%.
+Known debts: demo SIGSEGV masked by respawn (not root-caused, see
+known-issues); zombie feel pending interpolation + paths.
 
-Exit: camminata infinita sullo stesso seed senza hitches; stessi chunk
-della generazione single-thread (byte-identici a parità di seed);
-`ctest` verde con thread sanitizer pulito dove disponibile.
+### M5b — Streaming + multithread (after playable singleplayer)
+Out of the fixed 3×3: chunks generate around the walking player
+(on-demand provide + unload beyond radius), and generation moves
+off-thread so it never blocks the tick.
+
+Split order (one at a time, green suite between steps):
+1. **ChunkGen/IO worker**: one `std::jthread` + job queue (provide
+   requests per (cx,cz,seed)). The worker generates terrain+carve+
+   install+populate on private copies and hands the finished chunk over
+   via `std::move`; Main installs it and marks it dirty for remeshing.
+   Never share RNGs (architecture rule: one private `JavaRandom` per
+   job, seed `worldSeed ^ hash`).
+2. **Off-thread meshing**: CPU meshing on the `16x16 + 1 border`
+   snapshot (never the live chunk), VBO upload on the Render thread.
+3. **Render split** (last): dedicated GL context; Main stays the sole
+   `World` writer with Java-identical 20 TPS ticks so a future server
+   session does not desync.
+
+Stay single-threaded until needed: all M0–M5 parity work requires total
+determinism — light/physics update order must be 100% reproducible.
+
+Exit: endless walk on the same seed without hitches; same chunks as
+single-threaded generation (byte-identical for equal seeds);
+green `ctest` with a clean thread sanitizer where available.
 
 ### M6 — Audio + polish
 `SoundManager` on OpenAL-soft (`stb_vorbis`, `dr_wav`), `CodecMus`/`MusInputStream`
