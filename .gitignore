@@ -29,3 +29,5 @@ compile_commands.json
 
 # Local scratch notes (session handoff, never committed)
 HANDOFF.md
+/craftpp
+/craftpp_demo
