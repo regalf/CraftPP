@@ -2,6 +2,7 @@
 
 #include "render/mesh.hpp"
 #include "world/chunk.hpp"
+#include "world/region.hpp"
 
 namespace craftpp::render {
 
@@ -19,8 +20,19 @@ struct Mesher {
   float tint_r = 1.0F;
   float tint_g = 1.0F;
   float tint_b = 1.0F;
+  // Foliage tint for leaves (ColorizerFoliage; default sampled likewise).
+  float foliage_r = 1.0F;
+  float foliage_g = 1.0F;
+  float foliage_b = 1.0F;
 
   Mesh mesh_chunk(const world::Chunk& chunk) const;
+
+  // Live-world mesher for the client: textured cubes from a RegionWorld
+  // chunk (world coords via RegionWorld, so borders cull against real
+  // neighbours), per-face stored light, biome grass tint, and cross quads
+  // for render-type 1/2/3 (plants/torch/fire). Complex geometry types
+  // render as textured cubes for now (later milestones).
+  Mesh mesh_live(const world::RegionWorld& world, int cx, int cz) const;
 };
 
 }  // namespace craftpp::render

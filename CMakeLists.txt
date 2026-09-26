@@ -95,6 +95,8 @@ add_executable(craftpp_tests
   tests/test_frustum.cpp
   tests/test_mcregion.cpp
   tests/test_save.cpp
+  tests/test_textures.cpp
+  tests/test_mesher_live.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
 catch_discover_tests(craftpp_tests)

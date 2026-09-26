@@ -165,6 +165,8 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
     return manager_.temperatures(x, z, 1, 1)[0];
   }
   int stored_height(int x, int z) const { return region_.height_value(x, z); }
+  // Raw region access for the client mesher (read-only).
+  const RegionWorld& region() const { return region_; }
 
  private:
   std::int64_t seed_;
