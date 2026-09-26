@@ -41,7 +41,9 @@ void Pig::on_death(DamageSource src) {
 void Pig::update_entity_action_state() {
   Living::update_entity_action_state();  // yaw wander baseline
   // Creature stroll approximation: walk at moveSpeed in bursts, pause on
-  // bumps (vanilla uses real paths; same pace, same pauses).
+  // bumps (vanilla uses real paths; same pace, same pauses). Jump when
+  // blocked like EntityCreature does.
+  if (collided_horizontally) is_jumping = true;
   if (move_forward <= 0.0f) {
     if (rand.next_float() < 0.05f) move_forward = move_speed;
   } else if (collided_horizontally || rand.next_float() < 0.02f) {
@@ -88,6 +90,7 @@ void Zombie::on_living_update() {
 
 void Zombie::update_entity_action_state() {
   Living::update_entity_action_state();  // wander baseline + entityAge
+  if (collided_horizontally) is_jumping = true;  // climb 1-block steps
   // Despawn like the source (needs a player; null-safe).
   Entity* p0 = world->closest_player_to(*this, -1.0);
   if (p0 != nullptr) {

@@ -88,6 +88,23 @@ TEST_CASE("pig drops pork on death", "[mob]") {
   CHECK(pork > 0);
 }
 
+TEST_CASE("zombie climbs one-high wall", "[mob]") {
+  auto w = flat_world();
+  for (int z = 4; z < 13; ++z) w.set_raw(8, 65, z, world::bid::kStone, 0);
+  entity::PlayerSP player(&w, "t", 0);
+  player.set_position_and_rotation(14.5, 66.62, 8.5, 0.0f, 0.0f);
+  w.add_entity(&player);
+  entity::Zombie z(&w);
+  z.set_position_and_rotation(0.5, 65.0, 8.5, 0.0f, 0.0f);
+  w.add_entity(&z);
+  bool crossed = false;
+  for (int i = 0; i < 400 && !crossed; ++i) {
+    z.on_update();
+    if (z.pos_x > 10.0) crossed = true;
+  }
+  CHECK(crossed);
+}
+
 TEST_CASE("creative player takes no damage", "[mob]") {
   auto w = flat_world();
   entity::PlayerSP player(&w, "t", 0);
