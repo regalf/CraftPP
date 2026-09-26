@@ -43,6 +43,15 @@
 
 namespace {
 
+// Wheel accumulator (filled by the GLFW scroll callback, drained per tick).
+int g_wheel = 0;
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
+  (void)window;
+  (void)xoffset;
+  if (yoffset > 0) ++g_wheel;
+  if (yoffset < 0) --g_wheel;
+}
+
 using craftpp::JavaRandom;
 using craftpp::entity::Controller;
 using craftpp::entity::ControllerCreative;
@@ -266,6 +275,7 @@ int main(int argc, char** argv) {
   }
   glfwMakeContextCurrent(window);
   glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+  glfwSetScrollCallback(window, scroll_callback);
 
   // --- atlas + grass tint (local assets, never committed) ---
   craftpp::render::Image atlas_img;
@@ -498,6 +508,15 @@ int main(int argc, char** argv) {
         g_was = g_now;
         for (int k = 0; k < 9; ++k) {
           if (glfwGetKey(window, GLFW_KEY_1 + k) == GLFW_PRESS) player.inventory.current = k;
+        }
+        // Hotbar wheel (vanilla: up = previous slot, down = next, wrapped).
+        while (g_wheel > 0) {
+          player.inventory.current = (player.inventory.current + 8) % 9;
+          --g_wheel;
+        }
+        while (g_wheel < 0) {
+          player.inventory.current = (player.inventory.current + 1) % 9;
+          ++g_wheel;
         }
 
         world.tick();
