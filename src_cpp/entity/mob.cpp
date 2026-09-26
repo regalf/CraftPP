@@ -141,8 +141,14 @@ void Zombie::update_entity_action_state() {
     // No target: stroll like pigs do (vanilla wanders via paths).
     if (move_forward <= 0.0f) {
       if (rand.next_float() < 0.05f) move_forward = move_speed;
-    } else if (collided_horizontally || rand.next_float() < 0.02f) {
+    } else if (rand.next_float() < 0.02f) {
       move_forward = 0.0f;
+    }
+    if (collided_horizontally) {
+      // Bump into a wall: turn to slide along it instead of pushing
+      // forever (poor man's wall following; real paths are M5+).
+      rotation_yaw += (rand.next_float() - 0.5f) * 120.0f;
+      if (move_forward <= 0.0f) move_forward = move_speed;
     }
     return;
   }
