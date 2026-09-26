@@ -172,13 +172,13 @@ int LiveWorld::perform_spawning() {
   if (elig.border.empty()) return 0;
   int spawned = 0;
   // Creature types: hostile zombies (cap 70), peaceful pigs every 400 ticks
-  // (cap 10). Biome spawn lists are fixed pairs for now (M5+ biomes).
+  // (cap 15). Biome spawn lists are fixed pairs for now (M5+ biomes).
   struct Type {
     bool peaceful;
     int cap;
     bool gate;
   };
-  const Type types[2] = {{false, 70, true}, {true, 10, (time_ % 400LL) == 0LL}};
+  const Type types[2] = {{false, 70, true}, {true, 15, (time_ % 400LL) == 0LL}};
   for (const Type& t : types) {
     if (t.peaceful && (!spawn_peaceful_ || !t.gate)) continue;
     if (!t.peaceful && !spawn_hostile_) continue;
