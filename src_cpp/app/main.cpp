@@ -432,8 +432,10 @@ int main(int argc, char** argv) {
       }
       yaw += static_cast<float>(mx - last_x) * 0.15f;
       pitch += static_cast<float>(my - last_y) * 0.15f;
-      if (pitch < -90.0f) pitch = -90.0f;
-      if (pitch > 90.0f) pitch = 90.0f;
+      // lookAt degenerates looking straight up/down (forward parallel to
+      // the up vector), so stop just short like a real camera would.
+      if (pitch < -89.9f) pitch = -89.9f;
+      if (pitch > 89.9f) pitch = 89.9f;
       last_x = mx;
       last_y = my;
       player.rotation_yaw = yaw;
