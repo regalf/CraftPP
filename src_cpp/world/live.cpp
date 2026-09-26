@@ -57,8 +57,10 @@ void LiveWorld::tick() {
     (void)key;
     if (tile) tile->update(*this);
   }
-  // Dropped items tick + player pickup sweep (entity-collision equivalent:
-  // within ~1 block of a living player, no delay left).
+  // Dropped items tick + player pickup sweep. Mirrors the source: the
+  // player collides with items inside its bbox expanded by (1.0, 0.5, 1.0)
+  // (EntityPlayer entity push -> EntityItem.onCollideWithPlayer), gated on
+  // the 10-tick pickup delay.
   for (auto& it : items_) {
     if (it && !it->is_dead) it->on_update();
   }
@@ -67,10 +69,12 @@ void LiveWorld::tick() {
     for (entity::Entity* e : entities_) {
       auto* p = dynamic_cast<entity::Player*>(e);
       if (p == nullptr || p->is_dead) continue;
-      const double dx = p->pos_x - it->pos_x;
-      const double dy = (p->pos_y + p->height * 0.5) - it->pos_y;
-      const double dz = p->pos_z - it->pos_z;
-      if (dx * dx + dy * dy + dz * dz > 1.0) continue;
+      const Aabb& b = p->bbox;
+      if (it->pos_x < b.min_x - 1.0 || it->pos_x > b.max_x + 1.0 ||
+          it->pos_y < b.min_y - 0.5 || it->pos_y > b.max_y + 0.5 ||
+          it->pos_z < b.min_z - 1.0 || it->pos_z > b.max_z + 1.0) {
+        continue;
+      }
       if (p->inventory.add_stack(it->item) && it->item.stack_size <= 0) {
         it->set_entity_dead();
         break;

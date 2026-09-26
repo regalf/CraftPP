@@ -187,3 +187,22 @@ TEST_CASE("player picks up drops", "[mob]") {
   CHECK(planks == 3);
   CHECK(w.items().empty());
 }
+
+TEST_CASE("player picks up ground-level drops (bbox range, not center)", "[mob]") {
+  auto w = flat_world();
+  entity::PlayerSP player(&w, "t", 0);
+  player.set_position_and_rotation(8.5, 65.0, 8.5, 0.0f, 0.0f);
+  w.add_entity(&player);
+  // Drop at the player's feet (the real mining scenario): the old
+  // center-distance check never reached it, the bbox expand does.
+  w.on_item_drop(3, 2, 0, 8.5, 65.2, 9.2, 0, 0, 0);
+  REQUIRE(!w.items().empty());
+  w.items()[0]->pickup_delay = 0;
+  for (int i = 0; i < 5; ++i) w.tick();
+  int dirt = 0;
+  for (auto& s : player.inventory.main) {
+    if (s.has_value() && s->item_id == 3) dirt += s->stack_size;
+  }
+  CHECK(dirt == 2);
+  CHECK(w.items().empty());
+}
