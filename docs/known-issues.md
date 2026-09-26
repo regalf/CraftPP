@@ -180,6 +180,28 @@
 - Pickaxe tables keyed on raw ids (1,14,…) never match stack ids
   (257,270,…). Caught by inspection before tests ran.
 
+### F27. renderYawOffset wrap used -= instead of +=
+- **Symptom**: live world tick hung (infinite loop) a few ticks after
+  zombie spawns, in `Living::on_update` yaw normalization.
+- **Root cause**: `while (renderYawOffset - prev >= 180) prev -= 360`
+  drives prev away (diff grows); the source adds (`+=`). M4 tests never
+  hit it (needs a >180° yaw split across one tick, which only seeking
+  mobs produce). Sibling loops (rotation/prev, pitch) verified correct.
+  Found via core dump (`prev = -8.6e9`, `render = 360`).
+- **Fix**: one-character `+=`. Lesson: re-verify even "obvious" symmetric
+  wrap pairs sign-by-sign against source.
+
+### F28. Mob sweep destroyed owned mobs before dropping raw pointers
+- **Symptom**: SIGSEGV in `__dynamic_cast` after a while of live play
+  (demo crash), reproduced in a headless soak under ASan.
+- **Root cause**: `LiveWorld::tick` erased dead mobs from owned `mobs_`
+  (destroying them) and only afterwards removed their raw pointers from
+  `entities_`; the sweep predicate then read `is_dead` through freed
+  memory. Classic use-after-free, order-dependent.
+- **Fix**: erase raw pointers first (objects still alive), then destroy.
+  Lesson: with parallel owning/non-owning views, always unlink before
+  destroying. Soak-tested 3000 ticks under ASan+UBSan clean.
+
 ### Harness findings (documented, not port bugs)
 - `Math.random()` (attackedAtYaw jitter, EntityItem motion/yaw, Living
   ctor render fields) is wild per JVM run: never asserted.

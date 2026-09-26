@@ -82,13 +82,10 @@ void LiveWorld::tick() {
                                 return !e || e->is_dead;
                               }),
                items_.end());
-  // Spawn cycle + dead mob sweep.
+  // Spawn cycle + dead mob sweep. Order matters: drop the raw pointers
+  // from entities_ FIRST (objects still alive), then destroy owned mobs.
+  // Reversing this reads is_dead through freed memory (use-after-free).
   perform_spawning();
-  mobs_.erase(std::remove_if(mobs_.begin(), mobs_.end(),
-                             [](const std::unique_ptr<entity::Living>& e) {
-                               return !e || e->is_dead;
-                             }),
-              mobs_.end());
   entities_.erase(std::remove_if(entities_.begin(), entities_.end(),
                                  [](entity::Entity* e) {
                                    if (e == nullptr || !e->is_dead) return false;
@@ -96,6 +93,11 @@ void LiveWorld::tick() {
                                    return dynamic_cast<entity::Player*>(e) == nullptr;
                                  }),
                   entities_.end());
+  mobs_.erase(std::remove_if(mobs_.begin(), mobs_.end(),
+                             [](const std::unique_ptr<entity::Living>& e) {
+                               return !e || e->is_dead;
+                             }),
+              mobs_.end());
   // Random ticks on populated chunks near entities (7-chunk radius stream
   // like positionsToUpdate; demo scale ticks everything provided).
   for (const auto& [key, was] : populated_) {

@@ -38,6 +38,17 @@ void Pig::on_death(DamageSource src) {
   Living::on_death(src);
 }
 
+void Pig::update_entity_action_state() {
+  Living::update_entity_action_state();  // yaw wander baseline
+  // Creature stroll approximation: walk at moveSpeed in bursts, pause on
+  // bumps (vanilla uses real paths; same pace, same pauses).
+  if (move_forward <= 0.0f) {
+    if (rand.next_float() < 0.05f) move_forward = move_speed;
+  } else if (collided_horizontally || rand.next_float() < 0.02f) {
+    move_forward = 0.0f;
+  }
+}
+
 bool Pig::can_spawn_here() {
   auto* w = as_edit(world);
   if (w == nullptr) return false;
@@ -94,13 +105,21 @@ void Zombie::update_entity_action_state() {
   }
   // Seek the nearest player within 16 blocks.
   Entity* target = world->closest_player_to(*this, 16.0);
-  if (target == nullptr) return;
+  if (target == nullptr) {
+    // No target: stroll like pigs do (vanilla wanders via paths).
+    if (move_forward <= 0.0f) {
+      if (rand.next_float() < 0.05f) move_forward = move_speed;
+    } else if (collided_horizontally || rand.next_float() < 0.02f) {
+      move_forward = 0.0f;
+    }
+    return;
+  }
   const double dx = target->pos_x - pos_x;
   const double dz = target->pos_z - pos_z;
   const double d2 = dx * dx + dz * dz;
   rotation_yaw =
       static_cast<float>(std::atan2(dz, dx) * 180.0 / 3.141592653589793) - 90.0f;
-  move_forward = 1.0f;
+  move_forward = move_speed;
   if (attack_time <= 0 && d2 < 4.0 &&
       target->bbox.max_y > bbox.min_y && target->bbox.min_y < bbox.max_y) {
     attack_time = 20;

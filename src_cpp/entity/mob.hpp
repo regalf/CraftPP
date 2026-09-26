@@ -16,8 +16,11 @@ class Pig : public Living {
   int max_health() const override { return 10; }
   int get_drop_item_id() const override { return 319; }  // porkRaw (cooked if burning)
   void on_death(DamageSource src) override;
+  void update_entity_action_state() override;
 
   bool can_spawn_here();
+
+  float move_speed = 0.7f;  // EntityLiving default (wander stroll pace)
 };
 
 // Hostile zombie (EntityZombie subset): seeks players, burns in daylight.
@@ -35,6 +38,10 @@ class Zombie : public Living {
   void update_entity_action_state() override;
 
   bool can_spawn_here();
+
+  // EntityZombie.moveSpeed (path pace). Applied to move_forward when
+  // seeking; the base Living wander leaves it 0.
+  float move_speed = 0.5f;
 
  private:
   int attack_strength = 4;
