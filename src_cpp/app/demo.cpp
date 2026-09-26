@@ -311,6 +311,9 @@ int main(int argc, char** argv) {
   double accumulator = 0.0;
   constexpr double kTick = 1.0 / 20.0;
   int tick_count = 0;
+  // TPS meter: wall-clock measurement of delivered ticks (20.0 = realtime).
+  double tps_window = 0.0;
+  int tps_ticks = 0;
 
   while (glfwWindowShouldClose(window) == GLFW_FALSE) {
     const auto now = clock::now();
@@ -394,14 +397,41 @@ int main(int argc, char** argv) {
 
       world.tick();  // world time + registered entities (player)
       if (!creative) controller_sp.update_controller();
-      if (++tick_count % 20 == 0) {
-        char buf[128];
-        std::snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f onGround %d", player.pos_x, player.pos_y,
-                      player.pos_z, (int)player.on_ground);
+      // Demo auto-respawn (no death GUI yet): drop everything, reset, teleport.
+      if (player.is_dead) {
+        for (auto& s : player.inventory.main) {
+          if (s.has_value() && s->stack_size > 0) {
+            world.on_item_drop(s->item_id, s->stack_size, s->damage, player.pos_x, player.pos_y + 1.0,
+                               player.pos_z, 0.0, 0.0, 0.0);
+          }
+          s = std::nullopt;
+        }
+        for (auto& s : player.inventory.armor) s = std::nullopt;
+        player.health = 20;
+        player.food = craftpp::entity::FoodStats();
+        player.fire = 0;
+        player.air_supply = 300;
+        player.motion_x = player.motion_y = player.motion_z = 0.0;
+        player.fall_distance = 0.0f;
+        player.death_time = 0;
+        player.is_dead = false;
+        player.set_position_and_rotation(sx + 0.5, ground + 12.0 + 1.62, sz + 0.5, 0.0f, 0.0f);
+        craftpp::log_info("respawned (drops left where you died)");
+      }
+      ++tick_count;
+      ++tps_ticks;
+      if (tick_count % 20 == 0) {
+        char buf[160];
+        std::snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f onGround %d hp %d tps %.1f",
+                      player.pos_x, player.pos_y, player.pos_z, (int)player.on_ground, player.health,
+                      tps_ticks / (tps_window > 0.0 ? tps_window : 1.0));
         craftpp::log_info(buf);
+        tps_window = 0.0;
+        tps_ticks = 0;
       }
       accumulator -= kTick;
     }
+    tps_window += frame;
 
     // Render: eye camera + per-chunk meshes (remeshed when dirty).
     int w = 0, h = 0;
