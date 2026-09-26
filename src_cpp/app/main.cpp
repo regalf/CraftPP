@@ -303,7 +303,7 @@ int main(int argc, char** argv) {
     load_skin("/mob/zombie.png", zombie_tex);
   }
   // HUD assets: hotbar chrome, icons, font.
-  craftpp::render::Texture gui_tex, icons_tex, font_tex;
+  craftpp::render::Texture gui_tex, icons_tex, font_tex, items_tex;
   craftpp::gui::Font font;
   {
     craftpp::render::Image img;
@@ -325,6 +325,11 @@ int main(int argc, char** argv) {
     }
     if (!font.load_allowed(args.assets + "/font.txt")) {
       craftpp::log_error("cannot load font.txt");
+      return 1;
+    }
+    if (!craftpp::render::load_png((args.assets + "/gui/items.png").c_str(), img, err) ||
+        !items_tex.upload_nearest(img)) {
+      craftpp::log_error("cannot load /gui/items.png: " + err);
       return 1;
     }
   }
@@ -624,6 +629,15 @@ int main(int argc, char** argv) {
         hs.current_item = player.inventory.current;
         hs.xp_frac = player.current_xp;
         hs.xp_level = player.player_level;
+        for (int i = 0; i < 9; ++i) {
+          const auto& sl = player.inventory.main[i];
+          if (sl.has_value() && sl->stack_size > 0) {
+            hs.hotbar[i].id = sl->item_id;
+            hs.hotbar[i].count = sl->stack_size;
+            hs.hotbar[i].damage = sl->damage;
+            hs.hotbar[i].max_damage = sl->max_damage();
+          }
+        }
         const auto hud = craftpp::gui::build_hud(hs, font);
         const glm::mat4 ortho =
             glm::ortho(0.0F, static_cast<float>(w), static_cast<float>(h), 0.0F, -1.0F, 1.0F);
@@ -647,8 +661,25 @@ int main(int argc, char** argv) {
         };
         draw_2d(hud.chrome, gui_tex);
         draw_2d(hud.icons, icons_tex);
+        draw_2d(hud.items, items_tex);
+        // Block sprites reuse the terrain atlas (flat interim cubes).
+        atlas.bind(0);
+        if (!hud.blocks.vertices.empty()) {
+          craftpp::render::Tessellator tess;
+          tess.upload(hud.blocks);
+          tess.draw();
+        }
         draw_2d(hud.shadow, font_tex);
         draw_2d(hud.text, font_tex);
+        // Damage bars: flat color (no texture).
+        if (!hud.bars.vertices.empty()) {
+          flat_prog.use();
+          flat_prog.set_mat4(f_mvp, &ortho[0][0]);
+          flat_prog.set_float(f_bright, 1.0F);
+          craftpp::render::Tessellator tess;
+          tess.upload(hud.bars);
+          tess.draw();
+        }
         glDisable(GL_BLEND);
         glEnable(GL_DEPTH_TEST);
       }

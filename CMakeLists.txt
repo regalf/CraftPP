@@ -102,6 +102,7 @@ add_executable(craftpp_tests
   tests/test_mesher_live.cpp
   tests/test_model.cpp
   tests/test_font.cpp
+  tests/test_hud.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
 catch_discover_tests(craftpp_tests)

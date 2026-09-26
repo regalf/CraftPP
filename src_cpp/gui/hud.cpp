@@ -1,11 +1,15 @@
 #include "gui/hud.hpp"
 
+#include <cmath>
+
+#include "gui/item_icons.hpp"
+#include "world/blocks.hpp"
+
 namespace craftpp::gui {
 
 namespace {
 
-void blit(render::Mesh& m, float x, float y, float u, float v, float w, float h) {
-  const std::uint32_t base = static_cast<std::uint32_t>(m.vertices.size());
+void blit(render::Mesh& m, float x, float y, float u, float v, float w, float h) {  const std::uint32_t base = static_cast<std::uint32_t>(m.vertices.size());
   const float uu0 = u / 256.0F, vv0 = v / 256.0F;
   const float uu1 = (u + w) / 256.0F, vv1 = (v + h) / 256.0F;
   m.vertices.push_back({x, y + h, 0, 1, 1, 1, uu0, vv1});
@@ -17,6 +21,23 @@ void blit(render::Mesh& m, float x, float y, float u, float v, float w, float h)
 
 int xp_cap(int level) { return 7 + (level * 7 >> 1); }
 
+// Solid-color quad for damage bars (flat shader path, no texture).
+void solid(render::Mesh& m, float x, float y, float w, float h, float r, float g, float b) {
+  const std::uint32_t base = static_cast<std::uint32_t>(m.vertices.size());
+  m.vertices.push_back({x, y + h, 0, r, g, b, 0, 0});
+  m.vertices.push_back({x + w, y + h, 0, r, g, b, 0, 0});
+  m.vertices.push_back({x + w, y, 0, r, g, b, 0, 0});
+  m.vertices.push_back({x, y, 0, r, g, b, 0, 0});
+  m.indices.insert(m.indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+}
+
+// 16x16 sprite from a 256x256 atlas tile.
+void sprite(render::Mesh& m, float x, float y, int tile) {
+  const float tx = static_cast<float>((tile & 15) * 16);
+  const float ty = static_cast<float>(tile & 240);
+  blit(m, x, y, tx, ty, 16, 16);
+}
+
 }  // namespace
 
 HudMeshes build_hud(const HudState& s, const Font& font) {
@@ -27,6 +48,46 @@ HudMeshes build_hud(const HudState& s, const Font& font) {
   blit(out.chrome, w / 2 - 91, h - 22, 0, 0, 182, 22);
   blit(out.chrome, w / 2 - 91 - 1 + s.current_item * 20, h - 22 - 1, 0, 22, 24, 24);
   blit(out.icons, w / 2 - 7, h / 2 - 7, 0, 0, 16, 16);
+
+  // Hotbar items (renderInventorySlot x3 + renderItemOverlayIntoGUI).
+  for (int i = 0; i < 9; ++i) {
+    const HudSlot& sl = s.hotbar[i];
+    if (sl.id == 0 || sl.count <= 0) continue;
+    const float x = w / 2 - 90 + i * 20 + 2;
+    const float y = h - 16 - 3;
+    if (sl.id < 256) {
+      // Block: flat terrain sprite interim (vanilla renders a 3D cube).
+      sprite(out.blocks, x, y, world::bid::block_texture(sl.id, 2, sl.damage));
+    } else {
+      const int icon = item_sprite_index(sl.id);
+      if (icon >= 0) sprite(out.items, x, y, icon);
+    }
+    if (sl.count > 1) {
+      const std::string n = std::to_string(sl.count);
+      const float tx = x + 19 - 2 - font.string_width(n);
+      const float ty = y + 6 + 3;
+      auto sh = font.build_text(n, tx + 1, ty + 1, 0xFFFFFFFF, true);
+      auto fg = font.build_text(n, tx, ty, 0xFFFFFFFF, false);
+      auto base = static_cast<std::uint32_t>(out.shadow.vertices.size());
+      out.shadow.vertices.insert(out.shadow.vertices.end(), sh.vertices.begin(), sh.vertices.end());
+      for (auto ix : sh.indices) out.shadow.indices.push_back(base + ix);
+      base = static_cast<std::uint32_t>(out.text.vertices.size());
+      out.text.vertices.insert(out.text.vertices.end(), fg.vertices.begin(), fg.vertices.end());
+      for (auto ix : fg.indices) out.text.indices.push_back(base + ix);
+    }
+    if (sl.max_damage > 0 && sl.damage > 0) {
+      const int bar_w = static_cast<int>(
+          std::round(13.0 - static_cast<double>(sl.damage) * 13.0 / sl.max_damage));
+      const int col = static_cast<int>(
+          std::round(255.0 - static_cast<double>(sl.damage) * 255.0 / sl.max_damage));
+      const float fr = ((255 - col) >> 0 & 255) / 255.0F;  // (255-c)<<16 | c<<8
+      const float fg = (col & 255) / 255.0F;
+      const float br = (((255 - col) / 4) & 255) / 255.0F;  // (255-c)/4<<16 | 64
+      solid(out.bars, x + 2, y + 13, 13, 2, 0, 0, 0);
+      solid(out.bars, x + 2, y + 13, 12, 1, br, 63.0F / 255.0F, 0);
+      solid(out.bars, x + 2, y + 13, bar_w, 1, fr, fg, 0);
+    }
+  }
 
   if (!s.survival_hud) return out;
 
