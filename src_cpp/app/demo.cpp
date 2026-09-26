@@ -364,9 +364,29 @@ int main(int argc, char** argv) {
       const bool hit = pick_block(world, ex, ey, ez, lx, ly, lz, 4.0, hx, hy, hz, side);
       const bool lmb = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
       const bool rmb = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-      if (hit && lmb && !lmb_was) controller->click_block(hx, hy, hz, side);
-      if (hit && lmb) controller->send_block_removing(hx, hy, hz, side);
-      if (!lmb) controller->reset_block_removing();
+      // Melee first: closest living mob in front within reach (vanilla
+      // prioritizes entities over blocks).
+      craftpp::entity::Living* foe = nullptr;
+      double foe_d2 = 16.0;
+      for (auto& m : world.mobs()) {
+        if (!m || m->is_dead) continue;
+        const double mx = m->pos_x - ex, my = (m->pos_y + m->height * 0.5) - ey,
+                     mz = m->pos_z - ez;
+        const double d2 = mx * mx + my * my + mz * mz;
+        if (d2 >= foe_d2) continue;
+        const double len = std::sqrt(d2);
+        if (len < 1e-6) continue;
+        if ((mx * lx + my * ly + mz * lz) / len < 0.85) continue;
+        foe = m.get();
+        foe_d2 = d2;
+      }
+      if (foe != nullptr && lmb && !lmb_was) {
+        player.attack_target(*foe);
+      } else {
+        if (hit && lmb && !lmb_was) controller->click_block(hx, hy, hz, side);
+        if (hit && lmb) controller->send_block_removing(hx, hy, hz, side);
+        if (!lmb) controller->reset_block_removing();
+      }
       if (hit && rmb && !rmb_was) {
         // Place the held stack (survival consumes, creative restores).
         if (auto* held = player.inventory.held()) {

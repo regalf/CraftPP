@@ -40,10 +40,24 @@ void Pig::on_death(DamageSource src) {
 
 void Pig::update_entity_action_state() {
   Living::update_entity_action_state();  // yaw wander baseline
+  // EntityCreature resets isJumping every tick and only jumps when the
+  // path rises; approximate with a head-height probe ahead.
+  is_jumping = false;
+  if (collided_horizontally) {
+    auto* w = as_edit(world);
+    if (w != nullptr) {
+      const double rad = rotation_yaw * 3.141592653589793 / 180.0;
+      const int ax = MathHelper::floor_double(pos_x - std::sin(rad) * (width + 0.5));
+      const int az = MathHelper::floor_double(pos_z + std::cos(rad) * (width + 0.5));
+      const int feet = MathHelper::floor_double(bbox.min_y);
+      // Hop only onto a single step: solid at feet, air for two above.
+      if (w->is_normal_cube(ax, feet, az) && !w->is_normal_cube(ax, feet + 1, az) &&
+          !w->is_normal_cube(ax, feet + 2, az))
+        is_jumping = true;
+    }
+  }
   // Creature stroll approximation: walk at moveSpeed in bursts, pause on
-  // bumps (vanilla uses real paths; same pace, same pauses). Jump when
-  // blocked like EntityCreature does.
-  if (collided_horizontally) is_jumping = true;
+  // bumps (vanilla uses real paths; same pace, same pauses).
   if (move_forward <= 0.0f) {
     if (rand.next_float() < 0.05f) move_forward = move_speed;
   } else if (collided_horizontally || rand.next_float() < 0.02f) {
@@ -90,7 +104,22 @@ void Zombie::on_living_update() {
 
 void Zombie::update_entity_action_state() {
   Living::update_entity_action_state();  // wander baseline + entityAge
-  if (collided_horizontally) is_jumping = true;  // climb 1-block steps
+  // EntityCreature resets isJumping every tick; jump only when blocked by
+  // something taller than one step (head-height probe ahead).
+  is_jumping = false;
+  if (collided_horizontally) {
+    auto* w = as_edit(world);
+    if (w != nullptr) {
+      const double rad = rotation_yaw * 3.141592653589793 / 180.0;
+      const int ax = MathHelper::floor_double(pos_x - std::sin(rad) * (width + 0.5));
+      const int az = MathHelper::floor_double(pos_z + std::cos(rad) * (width + 0.5));
+      const int feet = MathHelper::floor_double(bbox.min_y);
+      // Hop only onto a single step: solid at feet, air for two above.
+      if (w->is_normal_cube(ax, feet, az) && !w->is_normal_cube(ax, feet + 1, az) &&
+          !w->is_normal_cube(ax, feet + 2, az))
+        is_jumping = true;
+    }
+  }
   // Despawn like the source (needs a player; null-safe).
   Entity* p0 = world->closest_player_to(*this, -1.0);
   if (p0 != nullptr) {
