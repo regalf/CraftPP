@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -21,6 +22,10 @@
 #include "world/tick.hpp"
 #include "world/tile.hpp"
 #include "world/worldgen.hpp"
+
+namespace craftpp::entity {
+class Player;
+}  // namespace craftpp::entity
 
 namespace craftpp::world {
 
@@ -87,6 +92,15 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   const std::vector<std::unique_ptr<entity::DroppedItem>>& items() const { return items_; }
   // Owned mobs (spawned by perform_spawning, also registered for ticks).
   const std::vector<std::unique_ptr<entity::Living>>& mobs() const { return mobs_; }
+  // ---- save/load access (world/save.*) ----
+  std::vector<const tile::TileEntity*> tile_entities() const;
+  const std::vector<tick::ScheduledTick>& scheduled_ticks() const { return sched_; }
+  void adopt_item(std::unique_ptr<entity::DroppedItem> e) { items_.push_back(std::move(e)); }
+  void adopt_mob(std::unique_ptr<entity::Living> e) { mobs_.push_back(std::move(e)); }
+  void set_tile(std::unique_ptr<tile::TileEntity> t);
+  void schedule_loaded_tick(int x, int y, int z, int id, int delay) {
+    tick::schedule_tick(sched_, time_, x, y, z, id, delay);
+  }
   void set_spawn_point(double x, double y, double z) {
     spawn_x_ = x;
     spawn_y_ = y;
@@ -96,6 +110,37 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
     spawn_hostile_ = hostile;
     spawn_peaceful_ = peaceful;
   }
+  // ---- McRegion save/load (world/save.*) ----
+  void set_level_name(std::string name) { level_name_ = std::move(name); }
+  const std::string& level_name() const { return level_name_; }
+  void set_world_time(std::int64_t t) { time_ = t; }
+  std::vector<std::int8_t> chunk_ids(int cx, int cz) const { return region_.chunk_bytes(cx, cz); }
+  std::vector<std::uint8_t> chunk_metadata(int cx, int cz) const {
+    return region_.chunk_meta(cx, cz);
+  }
+  std::vector<std::uint8_t> chunk_skylight(int cx, int cz) const {
+    return region_.chunk_light(cx, cz, true);
+  }
+  std::vector<std::uint8_t> chunk_blocklight(int cx, int cz) const {
+    return region_.chunk_light(cx, cz, false);
+  }
+  std::vector<std::uint8_t> chunk_heightmap(int cx, int cz) const {
+    return region_.chunk_height(cx, cz);
+  }
+  std::vector<std::pair<int, int>> provided_chunks() const;
+  void install_chunk(int cx, int cz, const std::int8_t* ids, const std::uint8_t* meta,
+                     const std::uint8_t* sky, const std::uint8_t* block,
+                     const std::uint8_t* height) {
+    region_.install_saved(cx, cz, ids, meta, sky, block, height);
+  }
+  void mark_populated(int cx, int cz) { populated_[{cx, cz}] = true; }
+  // Writes region/*.mcr for every provided chunk + level.dat rotation.
+  // When player != nullptr its state is stored as the level.dat Player
+  // compound (feet convention: pos_y - y_offset).
+  void save(const std::string& save_dir, const entity::Player* player = nullptr) const;
+  // Loads level.dat (seed must match) + all region chunks. Returns false
+  // when no save exists or the seed differs.
+  bool load(const std::string& save_dir);
   // SpawnerAnimals.performSpawning (pigs + zombies; biome lists are M5+).
   int perform_spawning();
   entity::Entity* closest_player_to(const entity::Entity& e, double max_dist) override;
@@ -140,6 +185,7 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   std::vector<std::unique_ptr<entity::DroppedItem>> items_;
   std::vector<std::unique_ptr<entity::Living>> mobs_;
   double spawn_x_ = 0.0, spawn_y_ = 64.0, spawn_z_ = 0.0;
+  std::string level_name_ = "Craft++";
   bool spawn_hostile_ = true;
   bool spawn_peaceful_ = true;
   std::vector<entity::Entity*> entities_;  // non-owning; app owns the player/mobs

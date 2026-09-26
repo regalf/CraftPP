@@ -108,5 +108,7 @@ TEST_CASE("nbt rejects bad input", "[nbt]") {
   craftpp::nbt::Reader r2(not_compound, sizeof(not_compound));
   CHECK_THROWS_AS(craftpp::nbt::read_root(r2), craftpp::nbt::Error);
 
-  CHECK_THROWS_AS(craftpp::nbt::Tag::make_string(""), std::invalid_argument);
+  // Empty strings are legal (Java NBTTagString/writeUTF allow them;
+  // sign text lines rely on it).
+  CHECK_NOTHROW(craftpp::nbt::Tag::make_string(""));
 }

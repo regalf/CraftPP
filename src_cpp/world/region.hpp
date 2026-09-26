@@ -24,7 +24,7 @@ class RegionWorld {
   void ensure_chunk(int cx, int cz, const std::int8_t* raw_blocks);
 
   bool has_chunk(int cx, int cz) const;
-
+  std::vector<std::pair<int, int>> chunk_keys() const;
   // Outside the region or y range: get returns air (Java loads/generates on
   // demand; tests pre-generate a margin so this never fires mid-pipeline).
   int get_id(int x, int y, int z) const;
@@ -61,6 +61,15 @@ class RegionWorld {
   // Dumps raw chunk bytes (Java layout) for hashing/comparison.
   std::vector<std::int8_t> chunk_bytes(int cx, int cz) const;
   std::vector<std::uint8_t> chunk_meta(int cx, int cz) const;
+  // Save/load support (McRegion): stored heightMap (256 bytes), packed
+  // light nibbles (16384 bytes, NibbleArray layout idx=(lx<<11)|(lz<<7)|y).
+  std::vector<std::uint8_t> chunk_height(int cx, int cz) const;
+  std::vector<std::uint8_t> chunk_light(int cx, int cz, bool sky) const;
+  // Wholesale install of a loaded chunk (ids + meta + packed sky/block +
+  // heightMap); precip/occl start fresh like a newly generated chunk.
+  void install_saved(int cx, int cz, const std::int8_t* ids, const std::uint8_t* meta,
+                     const std::uint8_t* sky, const std::uint8_t* block,
+                     const std::uint8_t* height);
 
  private:
   struct ChunkData {

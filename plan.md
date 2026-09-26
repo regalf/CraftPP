@@ -77,8 +77,8 @@ Status: **done** (split for sanity, all verified differential vs OpenJDK).
 creative), AABB collision, block break/place, day/night tick. Exit: walk/jump/
 fall/mine/place feel identical at 20 TPS.
 
-Status: **done** (verified differential vs OpenJDK, suite 40482/40484 —
-the 2 failures are the known M5 light cell).
+Status: **done** (verified differential vs OpenJDK, suite fully green —
+the old M5 light cell is closed, see M5 status below).
 - Entity base: full `moveEntity` (sneak edge, axis clamps, step-up,
   fall-state, walk distance, web/soul/cactus hooks, burning box),
   `onEntityUpdate` with all RNG draws, water push, lava, `moveFlying`.
@@ -132,10 +132,10 @@ fly double-tap, TPS meter, auto-respawn).
 
 ## Remaining M5 (dependency order — replan 2026-09-26)
 
-1. **McRegion save/load** — level.dat, entity/tile NBT, chunk dirty
-   tracking. Without it there is no "continue a saved game". Also
-   enables comparison against the vanilla 1.0 server
-   (`~/jars/minecraft_server.jar`).
+1. **McRegion save/load — done** (level.dat + region/*.mcr + level.dat
+   Player + chunk Entities/TileEntities/TileTicks; validated both ways
+   against real Java 1.0 classes; demo `--save <dir>` loads/saves,
+   SIGTERM/SIGINT exit cleanly).
 2. **GUI + menus** — main menu, HUD (hearts/food/hotbar), usable
    inventory (crafting grid, furnace, chest), death screen, FontRenderer.
    The inventory exists but is unusable without this.

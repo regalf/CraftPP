@@ -30,6 +30,20 @@ class DroppedItem : public Entity {
     motion_z = (world->world_rand().next_float() - 0.5) * 0.2;
   }
 
+  // Load path: explicit motion, no RNG draws (loading must not perturb the
+  // world RNG the way live drops do).
+  DroppedItem(EntityWorld* w, double x, double y, double z, const ItemStack& stack, double mx,
+              double my, double mz)
+      : Entity(w), item(stack) {
+    width = 0.25f;
+    height = 0.25f;
+    y_offset = height / 2.0f;
+    set_position(x, y, z);
+    motion_x = mx;
+    motion_y = my;
+    motion_z = mz;
+  }
+
   void on_update() override {
     if (pickup_delay > 0) --pickup_delay;
     motion_y -= 0.04;

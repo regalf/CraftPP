@@ -9,8 +9,10 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <csignal>
 #include <cstring>
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -31,6 +33,7 @@
 #include "render/texture.hpp"
 #include "world/chunk_manager.hpp"
 #include "world/live.hpp"
+#include "world/save.hpp"
 #include "world/provider.hpp"
 
 namespace {
@@ -218,12 +221,28 @@ void main() {
 }  // namespace
 
 int main(int argc, char** argv) {
+  // Clean exit (with save) on SIGTERM/SIGINT.
+  static volatile std::sig_atomic_t quit_flag = 0;
+  std::signal(SIGTERM, [](int) { quit_flag = 1; });
+  std::signal(SIGINT, [](int) { quit_flag = 1; });
   std::int64_t seed = 1;
+  std::string save_dir;
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--seed") == 0 && i + 1 < argc) seed = std::atoll(argv[++i]);
+    if (std::strcmp(argv[i], "--save") == 0 && i + 1 < argc) save_dir = argv[++i];
   }
 
+  // McRegion save: when level.dat exists the saved seed wins over --seed.
+  std::optional<craftpp::world::WorldInfoData> saved_info;
+  if (!save_dir.empty()) saved_info = craftpp::world::read_level_dat(save_dir);
+  if (saved_info.has_value()) seed = saved_info->seed;
+
   LiveWorld world(seed);
+  bool loaded = false;
+  if (saved_info.has_value()) {
+    loaded = world.load(save_dir);
+    if (loaded) craftpp::log_info("loaded save from " + save_dir);
+  }
   world.provide_area(-1, -1, 1, 1);  // terrain + caves + populate + light
   craftpp::log_info("demo world ready (3x3 live chunks: caves + populate + light)");
 
@@ -254,9 +273,13 @@ int main(int argc, char** argv) {
   const int ground = surface_at(sx, sz);
   PlayerSP player(&world, "demo", 0);
   world.add_entity(&player);
-  world.set_spawn_point(sx + 0.5, ground, sz + 0.5);
-  // Drop in from the sky (also demos falling); settles on its own.
-  player.set_position_and_rotation(sx + 0.5, ground + 12.0 + 1.62, sz + 0.5, 0.0f, 0.0f);
+  if (loaded && saved_info->player.has_value()) {
+    craftpp::world::apply_player_tag(player, *saved_info->player);
+  } else {
+    world.set_spawn_point(sx + 0.5, ground, sz + 0.5);
+    // Drop in from the sky (also demos falling); settles on its own.
+    player.set_position_and_rotation(sx + 0.5, ground + 12.0 + 1.62, sz + 0.5, 0.0f, 0.0f);
+  }
   ControllerSP controller_sp(world, player);
   ControllerCreative controller_cr(world, player);
   craftpp::entity::Controller* controller = &controller_sp;
@@ -517,9 +540,14 @@ int main(int argc, char** argv) {
     glfwSwapBuffers(window);
     glfwPollEvents();
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) break;
+    if (quit_flag != 0) break;
   }
   }  // end GL scope (shader/meshes die before glfwTerminate)
 
+  if (!save_dir.empty()) {
+    world.save(save_dir, &player);
+    craftpp::log_info("saved world to " + save_dir);
+  }
   glfwDestroyWindow(window);
   glfwTerminate();
   return exit_code;

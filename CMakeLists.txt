@@ -38,6 +38,8 @@ add_library(craftpp_core
   src_cpp/world/live.cpp
   src_cpp/world/block_collision.cpp
   src_cpp/world/block_place.cpp
+  src_cpp/world/mcregion.cpp
+  src_cpp/world/save.cpp
   src_cpp/entity/entity.cpp
   src_cpp/entity/living.cpp
   src_cpp/entity/items.cpp
@@ -91,6 +93,8 @@ add_executable(craftpp_tests
   tests/test_crafting.cpp
   tests/test_mob.cpp
   tests/test_frustum.cpp
+  tests/test_mcregion.cpp
+  tests/test_save.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
 catch_discover_tests(craftpp_tests)

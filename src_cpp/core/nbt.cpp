@@ -394,4 +394,25 @@ std::vector<std::uint8_t> gzip_decompress(const std::uint8_t* data, std::size_t 
   return out;
 }
 
+std::vector<std::uint8_t> zlib_compress(const std::uint8_t* data, std::size_t len) {
+  std::vector<std::uint8_t> out;
+  z_stream strm{};
+  if (deflateInit(&strm, Z_DEFAULT_COMPRESSION) != Z_OK) {
+    throw Error("nbt: deflateInit failed");
+  }
+  strm.next_in = const_cast<Bytef*>(data);
+  strm.avail_in = static_cast<uInt>(len);
+  std::uint8_t chunk[32768];
+  int ret = Z_OK;
+  while (ret == Z_OK) {
+    strm.next_out = chunk;
+    strm.avail_out = sizeof(chunk);
+    ret = deflate(&strm, Z_FINISH);
+    out.insert(out.end(), chunk, chunk + (sizeof(chunk) - strm.avail_out));
+  }
+  deflateEnd(&strm);
+  if (ret != Z_STREAM_END) throw Error("nbt: zlib compress failed");
+  return out;
+}
+
 }  // namespace craftpp::nbt

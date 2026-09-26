@@ -40,6 +40,13 @@ bool RegionWorld::has_chunk(int cx, int cz) const {
   return chunks_.count(std::make_pair(cx, cz)) != 0;
 }
 
+std::vector<std::pair<int, int>> RegionWorld::chunk_keys() const {
+  std::vector<std::pair<int, int>> out;
+  out.reserve(chunks_.size());
+  for (const auto& [key, _] : chunks_) out.push_back(key);
+  return out;
+}
+
 const RegionWorld::ChunkData* RegionWorld::find(int cx, int cz) const {
   auto it = chunks_.find(std::make_pair(cx, cz));
   return it == chunks_.end() ? nullptr : &it->second;
@@ -352,6 +359,73 @@ std::vector<std::int8_t> RegionWorld::chunk_bytes(int cx, int cz) const {
 std::vector<std::uint8_t> RegionWorld::chunk_meta(int cx, int cz) const {
   const ChunkData* c = find(cx, cz);
   return c == nullptr ? std::vector<std::uint8_t>{} : c->meta;
+}
+
+namespace {
+// Vanilla NibbleArray index for 128-high chunks: (lx<<11)|(lz<<7)|y.
+std::size_t nibble_index(int lx, int y, int lz) {
+  return (static_cast<std::size_t>(lx) << 11) | (static_cast<std::size_t>(lz) << 7) |
+         static_cast<std::size_t>(y);
+}
+}  // namespace
+
+std::vector<std::uint8_t> RegionWorld::chunk_height(int cx, int cz) const {
+  const ChunkData* c = find(cx, cz);
+  return c == nullptr ? std::vector<std::uint8_t>{} : c->height;
+}
+
+std::vector<std::uint8_t> RegionWorld::chunk_light(int cx, int cz, bool sky) const {
+  std::vector<std::uint8_t> out(16 * kHeight * 16 / 2, 0);
+  const ChunkData* c = find(cx, cz);
+  if (c == nullptr) return out;
+  const std::vector<std::uint8_t>& src = sky ? c->sky : c->block;
+  for (int lx = 0; lx < 16; ++lx) {
+    for (int lz = 0; lz < 16; ++lz) {
+      for (int y = 0; y < kHeight; ++y) {
+        const std::size_t ni = nibble_index(lx, y, lz);
+        const int v = src[raw_index(lx, y, lz)] & 15;
+        if ((ni & 1) == 0) {
+          out[ni >> 1] = static_cast<std::uint8_t>(out[ni >> 1] | v);
+        } else {
+          out[ni >> 1] = static_cast<std::uint8_t>(out[ni >> 1] | (v << 4));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+void RegionWorld::install_saved(int cx, int cz, const std::int8_t* ids, const std::uint8_t* meta,
+                                const std::uint8_t* sky, const std::uint8_t* block,
+                                const std::uint8_t* height) {
+  auto key = std::make_pair(cx, cz);
+  if (chunks_.count(key) != 0) return;
+  ChunkData d;
+  d.ids.assign(ids, ids + 16 * kHeight * 16);
+  d.meta.assign(meta, meta + 16 * kHeight * 16);
+  d.sky.assign(16 * kHeight * 16, 0);
+  d.block.assign(16 * kHeight * 16, 0);
+  for (int lx = 0; lx < 16; ++lx) {
+    for (int lz = 0; lz < 16; ++lz) {
+      for (int y = 0; y < kHeight; ++y) {
+        const std::size_t ni = nibble_index(lx, y, lz);
+        const int b = sky[ni >> 1];
+        d.sky[raw_index(lx, y, lz)] =
+            static_cast<std::uint8_t>((ni & 1) == 0 ? (b & 15) : ((b >> 4) & 15));
+        const int q = block[ni >> 1];
+        d.block[raw_index(lx, y, lz)] =
+            static_cast<std::uint8_t>((ni & 1) == 0 ? (q & 15) : ((q >> 4) & 15));
+      }
+    }
+  }
+  d.height.assign(height, height + 256);
+  d.precip.assign(256, -999);
+  d.occl.assign(256, false);
+  d.lowest = kHeight - 1;
+  for (int v : d.height) {
+    if (v < d.lowest) d.lowest = v;
+  }
+  chunks_[key] = std::move(d);
 }
 
 void RegionWorld::update_light_by_type(bool sky, int x, int y, int z) {

@@ -82,7 +82,6 @@ struct Tag {
     return t;
   }
   static Tag make_string(std::string v) {
-    if (v.empty()) throw std::invalid_argument("empty string not allowed (mirrors NBTTagString)");
     Tag t;
     t.type = TagType::String;
     t.str = std::move(v);
@@ -158,5 +157,9 @@ void write_root(Writer& w, const std::string& name, const Tag& compound);
 // Gzip container (mirrors CompressedStreamTools gzip methods).
 std::vector<std::uint8_t> gzip_compress(const std::uint8_t* data, std::size_t len);
 std::vector<std::uint8_t> gzip_decompress(const std::uint8_t* data, std::size_t len);
+std::vector<std::uint8_t> zlib_compress(const std::uint8_t* data, std::size_t len);
+// Raw zlib stream (mirrors java.util.zip Deflater/Inflater as used by
+// RegionFile chunk payloads, compression version byte 2). gzip_decompress
+// auto-detects the wrapper, so only the compressor is separate.
 
 }  // namespace craftpp::nbt
