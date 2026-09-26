@@ -25,3 +25,6 @@ craft++
 .clangd/
 compile_commands.json
 .cache/
+
+# Local scratch notes (session handoff, never committed)
+HANDOFF.md
