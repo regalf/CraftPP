@@ -69,6 +69,66 @@ struct Inventory {
   void destroy_held() {
     if (auto* h = held()) *h = std::nullopt;
   }
+  // InventoryPlayer.addItemStackToInventory (merges then empties; returns
+  // true if anything moved; creative bucket-deplete skipped: survival).
+  bool add_stack(ItemStack& stack) {
+    if (stack.stack_size <= 0) return true;
+    if (stack.damageable() && stack.damage != 0) {
+      const int empty = first_empty();
+      if (empty < 0) return false;
+      main[empty] = stack.copy();
+      stack.stack_size = 0;
+      return true;
+    }
+    const int before = stack.stack_size;
+    int left = before, prev = before + 1;
+    while (left > 0 && left < prev) {
+      prev = left;
+      stack.stack_size = left;
+      left = store_partial(stack);
+    }
+    stack.stack_size = left;
+    return left < before;
+  }
+
+ private:
+  int first_empty() const {
+    for (int i = 0; i < 36; ++i)
+      if (!main[i].has_value()) return i;
+    return -1;
+  }
+  int store_existing(const ItemStack& stack) const {
+    for (int i = 0; i < 36; ++i) {
+      const auto& s = main[i];
+      if (s.has_value() && s->item_id == stack.item_id && s->stackable() &&
+          s->stack_size < s->max_stack() && s->stack_size < 64 &&
+          (!s->has_subtypes() || s->damage == stack.damage))
+        return i;
+    }
+    return -1;
+  }
+  // storePartialItemStack: returns the leftover count.
+  int store_partial(ItemStack& stack) {
+    const int id = stack.item_id;
+    int left = stack.stack_size;
+    if (stack.max_stack() == 1) {
+      const int e = first_empty();
+      if (e < 0) return left;
+      main[e] = stack.copy();
+      main[e]->stack_size = 1;
+      return left - 1;
+    }
+    int slot = store_existing(stack);
+    if (slot < 0) slot = first_empty();
+    if (slot < 0) return left;
+    if (!main[slot].has_value()) main[slot] = ItemStack(id, 0, stack.damage);
+    auto& s = *main[slot];
+    int room = s.max_stack() - s.stack_size;
+    if (room > 64 - s.stack_size) room = 64 - s.stack_size;
+    int move = left < room ? left : room;
+    s.stack_size += move;
+    return left - move;
+  }
 };
 
 // EntityPlayer M4 surface: inventory, capabilities, food stub, item use,

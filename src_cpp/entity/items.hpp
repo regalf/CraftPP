@@ -59,6 +59,31 @@ struct ItemStack {
   bool on_block_destroyed(int x, int y, int z, ItemUser& user);
   // Item.hitEntity dispatch (Tool -2, Sword -1, else false).
   bool hit_entity(ItemUser& user);
+
+  // ---- inventory helpers (InventoryPlayer/Container parity) ----
+  int max_stack() const { return world::edit::item_max_stack(item_id); }
+  bool stackable() const {
+    return max_stack() > 1 && (!damageable() || damage == 0);
+  }
+  // Items with subtypes only merge on equal damage (coal/charcoal, dyes).
+  bool has_subtypes() const {
+    return item_id == 263 || item_id == 351;  // coal, dye
+  }
+  bool is_equal(const ItemStack& o) const {
+    return item_id == o.item_id && (!has_subtypes() || damage == o.damage);
+  }
+  ItemStack copy() const { return *this; }
+  // splitStack(var2): removes n, returns the taken stack.
+  ItemStack split(int n) {
+    if (n >= stack_size) {
+      ItemStack out = *this;
+      stack_size = 0;
+      return out;
+    }
+    ItemStack out(item_id, n, damage);
+    stack_size -= n;
+    return out;
+  }
 };
 
 }  // namespace craftpp::entity

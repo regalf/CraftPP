@@ -71,6 +71,7 @@ bool Player::attack(DamageSource src, int amount) {
 
 bool Player::attack_ex(DamageSource src, int amount, Entity* attacker) {
   if (world->multiplayer()) return false;
+  if (capabilities.disable_damage) return false;  // creative (void kill bypasses)
   entity_age = 0;
   if (health <= 0) return false;
   // Sleeping wake-up is M5 (sleeping never true in M4).

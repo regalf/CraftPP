@@ -327,6 +327,28 @@ void Entity::on_entity_update() {
   first_update = false;
 }
 
+void Entity::apply_entity_collision(Entity& other) {
+  // No riding in M5 (pointers stay null), so the guard always passes.
+  double dx = other.pos_x - pos_x;
+  double dz = other.pos_z - pos_z;
+  double m = MathHelper::abs_max(dx, dz);
+  if (m >= 0.01) {
+    m = MathHelper::sqrt_double(m);
+    dx /= m;
+    dz /= m;
+    double push = 1.0 / m;
+    if (push > 1.0) push = 1.0;
+    dx *= push;
+    dz *= push;
+    dx *= 0.05;
+    dz *= 0.05;
+    dx *= 1.0 - entity_collision_reduction;
+    dz *= 1.0 - entity_collision_reduction;
+    add_velocity(-dx, 0.0, -dz);
+    other.add_velocity(dx, 0.0, dz);
+  }
+}
+
 void Entity::move_entity(double dx, double dy, double dz) {
   if (no_clip) {
     bbox.offset(dx, dy, dz);

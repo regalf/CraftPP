@@ -110,26 +110,22 @@
   (fixed during the port); `getBlockLightValue` block branch covers lava
   springs for the ice/snow `<10` checks; the cap reads precipitation height.
 
-## OPEN ISSUE 4 — three oracle-divergent light cells (M5, accepted)
+## OPEN ISSUE 4 — three oracle-divergent light cells — CLOSED (was my bug)
 
-- Suite 40479/40484: (-32,20) grass at (-505,73,334), (-31,21) grass at
-  (-494,76,345)/(-492,77,343)/(-491,77,343), (-31,-22) mushroom at
-  (-482,63,-338). The engine (verified mechanism-by-mechanism against source:
-  triggers, relight entry/scan/fills/column-loop/neighbor updates,
-  BFS decrease+spread, computes, clamps, guards, install, indices; per-set
-  BFS proven no-op at these cells by bisection) evolves them to live values
-  7/6-7/9; the goldens need 8+/8+/13+.
-- Those golden values are unreachable under vanilla mechanics given the
-  pinned write sequence: the relight chains there are first-arrival (real
-  writes, proven by probe), and any relight darkens such cells to <=7
-  (air counts 1 in the column loop). Granular probes (per-call snapshots,
-  check logging, order experiments, guard-area experiments, pre-carve base
-  comparison) all confirm the engine follows the vanilla timeline; the
-  goldens predate the light engine (frozen-sky era) and likely embed harness
-  behavior at these 4 marginal threshold cells.
-- Adjudication: regenerate ground truth from a real 1.0 server (McRegion
-  read of seed-1 spawn area) once McRegion lands in M5, then either fix the
-  engine or the goldens. Gameplay impact: nil (4/1.5M cells, visuals only).
+- The 4 marginal cells ((-32,20) grass, (-31,21) 3 grass, (-31,-22)
+  mushroom) are GREEN with the true goldens. Root cause was a real engine
+  bug, not oracle artifacts: the `updateLightByType` increase-spread phase
+  was nested inside the `want < saved` decrease branch, so light *increases*
+  never propagated (only decreases did). Found via the M5 ice-melt live
+  test (lava block light stayed 0). One-brace fix in `region.cpp`.
+- Retraction: the earlier "QED unreachable, must be oracle artifacts"
+  analysis was wrong — it assumed the spread ran. The bisection correctly
+  showed per-set BFS was a no-op at those cells, but the live re-brightening
+  arrives through relight-adjacent increase paths that need the working
+  spread phase. Lesson: when mechanism and goldens disagree, suspect the
+  transcription structure (brace nesting!), not the oracle.
+- Net M5 light-engine result: suite fully green including all 45 populated
+  chunks (~1.5M cells) with zero gaps.
 
 ## Fixed bugs, M4 round (for the record)
 

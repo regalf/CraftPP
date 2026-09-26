@@ -66,14 +66,11 @@ Status: **done** (split for sanity, all verified differential vs OpenJDK).
 
 ## Open bugs (M3c) — detail in `docs/known-issues.md`
 
-1. **Light-engine oracle gaps** (accepted, 5 assertions): the M5 synchronous
-   light engine closed the original single-cell gap ((-32,19) now green via
-   live canopy shade) but 4 marginal threshold cells diverge from the
-   pre-light-era oracle goldens ((-32,20) 1 grass, (-31,21) 3 grass,
-   (-31,-22) 1 mushroom). The engine is source-verified mechanism by
-   mechanism and the golden values are unreachable under vanilla mechanics
-   given the pinned writes; adjudicate against a real 1.0 server (McRegion)
-   in M5. The tests keep the true oracle goldens with KNOWN-GAP comments.
+1. **Light-engine gaps fixed**: the M5 engine closed all of them — the
+   original (-32,19) cell plus 4 marginal threshold cells that briefly
+   diverged due to a real engine bug (increase-spread nested in the decrease
+   branch; one-brace fix, see OPEN ISSUE 4). Populate suite fully green with
+   zero gaps.
 
 ### M4 — Player physics + interaction
 `Entity`, `EntityLiving`, `EntityPlayerSP`, `PlayerController` (survival +
@@ -121,11 +118,13 @@ Status: **light engine done** (`RegionWorld`: stored heightMap + sky/block
 nibbles, `relightBlock` with the vanilla local-coords quirk,
 `updateLightByType` BFS, `updateAllLightTypes` on every write, stored-height
 `canBlockSeeTheSky`, lazy precipitation heights, lava `lightValue` for the
-ice/snow cap). Suite 40479/40484 — the 5 failures are accepted oracle gaps
-(see above). **Live world skeleton done** (`LiveWorld`: real
+ice/snow cap). **Live world skeleton done** (`LiveWorld`: real
 terrain+carve+populate+light chunks behind `EditWorld`, world time,
-entity registry at 20 TPS; demo migrated to it). Next: TileEntity,
-random ticks, mobs.
+entity registry at 20 TPS; demo migrated to it). **Day/night + random
+ticks done** (`world/tick.*`: celestial angle, skylight subtracted,
+grass spread/kill, leaves decay, ice melt, flower/mushroom pops, fire
+spread with a scheduled queue). Suite fully green, zero gaps. Next:
+TileEntity, mobs.
 
 ### M5b — Streaming + multithread (dopo il singleplayer giocabile)
 Il mondo esce dal 3×3 fisso: chunk generati attorno al giocatore mentre

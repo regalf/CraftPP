@@ -18,6 +18,7 @@ enum class DamageSource {
   kDrown,    // drown (no air)
   kFall,     // fall (impact)
   kPlayer,   // causePlayerDamage (carries the attacker via attack_ex)
+  kMob,      // causeMobDamage (mob melee via attack_ex)
 };
 
 // World services an Entity needs. The M4 test world implements this over a
@@ -155,6 +156,8 @@ class Entity {
     motion_z += dz;
     is_air_borne = true;
   }
+  // Entity.applyEntityCollision (entity-entity push; riding is always null).
+  void apply_entity_collision(Entity& other);
   bool is_inside_opaque_block() const;  // Entity.java (8 eye samples)
 
  protected:

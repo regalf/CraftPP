@@ -33,6 +33,8 @@ add_library(craftpp_core
   src_cpp/world/mapgen.cpp
   src_cpp/world/fluid.cpp
   src_cpp/world/worldgen.cpp
+  src_cpp/world/tick.cpp
+  src_cpp/world/tile.cpp
   src_cpp/world/live.cpp
   src_cpp/world/block_collision.cpp
   src_cpp/world/block_place.cpp
@@ -41,6 +43,7 @@ add_library(craftpp_core
   src_cpp/entity/items.cpp
   src_cpp/entity/player.cpp
   src_cpp/entity/player_sp.cpp
+  src_cpp/entity/mob.cpp
   src_cpp/entity/controller.cpp
   src_cpp/render/mesher.cpp
   src_cpp/render/frustum.cpp
@@ -48,6 +51,7 @@ add_library(craftpp_core
   src_cpp/render/texture.cpp
   src_cpp/render/stb_impl.cpp
   src_cpp/render/tessellator.cpp
+  src_cpp/gui/crafting.cpp
 )
 target_include_directories(craftpp_core PUBLIC src_cpp third_party ${EPOXY_INCLUDE_DIRS})
 target_link_libraries(craftpp_core PUBLIC ZLIB::ZLIB glm::glm ${EPOXY_LIBRARIES})
@@ -82,6 +86,10 @@ add_executable(craftpp_tests
   tests/test_living.cpp
   tests/test_player.cpp
   tests/test_live.cpp
+  tests/test_tick.cpp
+  tests/test_tile.cpp
+  tests/test_crafting.cpp
+  tests/test_mob.cpp
   tests/test_frustum.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)

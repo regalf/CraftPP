@@ -91,7 +91,7 @@ void Living::on_update() {
   while (rotation_yaw - prev_rotation_yaw < -180.0f) prev_rotation_yaw -= 360.0f;
   while (rotation_yaw - prev_rotation_yaw >= 180.0f) prev_rotation_yaw += 360.0f;
   while (render_yaw_offset - prev_render_yaw_offset < -180.0f) prev_render_yaw_offset -= 360.0f;
-  while (render_yaw_offset - prev_render_yaw_offset >= 180.0f) prev_render_yaw_offset -= 360.0f;
+  while (render_yaw_offset - prev_render_yaw_offset >= 180.0f) prev_render_yaw_offset += 360.0f;
   while (rotation_pitch - prev_rotation_pitch < -180.0f) prev_rotation_pitch -= 360.0f;
   while (rotation_pitch - prev_rotation_pitch >= 180.0f) prev_rotation_pitch += 360.0f;
   limb_phase += wobble;
@@ -240,6 +240,7 @@ void Living::damage_entity(DamageSource src, int amount) {
 void Living::knock_back(Entity& attacker, int amount, double dx, double dz) {
   is_air_borne = true;
   const float dist = MathHelper::sqrt_double(dx * dx + dz * dz);
+  if (dist < 1e-6) return;  // exact overlap is separated by entity push first
   constexpr float kPush = 0.4f;
   motion_x /= 2.0;
   motion_y /= 2.0;
@@ -417,9 +418,9 @@ void Living::on_living_update() {
   land_movement_factor *= speed_factor();
   move_entity_with_heading(move_strafing, move_forward);
   land_movement_factor = saved_factor;
-  // Entity push section: test/live worlds report no neighbors (M5 adds mobs).
+  // Entity push section: shove neighbors apart (needs live entity queries).
   for (Entity* other : world->entities_excluding(*this, bbox.expand(0.2, 0.0, 0.2))) {
-    (void)other;
+    if (other != nullptr) other->apply_entity_collision(*this);
   }
 }
 

@@ -1131,9 +1131,7 @@ TEST_CASE("populate matches Java", "[populate]") {
         INFO("col " << x << "," << z);
         CHECK(top == kHM_Sm32_20_m32_19[x * 16 + z]);
       }
-      // M5 light engine CLOSED this gap (was stale-low 7 pre-engine): the
-      // synchronous relightBlock + updateLightByType now reproduce Java's 7
-      // (live canopy shade from leaves at 76-79) and the grass stays absent.
+      // (M5 light engine covers this cell: live canopy shade = 7.)
       CHECK(hash_bytes(b) == -456272616);
       CHECK(hash_meta(site.world.chunk_meta(-32, 19)) == 629167900);
     }
@@ -1146,13 +1144,6 @@ TEST_CASE("populate matches Java", "[populate]") {
         INFO("col " << x << "," << z);
         CHECK(top == kHM_Sm32_20_m32_20[x * 16 + z]);
       }
-      // KNOWN GAP (M5 light engine, oracle-divergent): tall grass at world
-      // (-505,73,334). The vanilla-faithful engine evolves this canopy column
-      // to live sky 7 (4 leaves above via relight chain 73->81), so the grass
-      // check fails; the oracle golden keeps the grass (needs sky 8+, which
-      // is unreachable under vanilla mechanics given the pinned writes —
-      // any relight darkens this cell to <=7 since air counts 1 in the
-      // column loop). Adjudicate against a real 1.0 server (McRegion) in M5.
       CHECK(hash_bytes(b) == 1072112305);
       CHECK(hash_meta(site.world.chunk_meta(-32, 20)) == 2055257996);
     }
@@ -1201,9 +1192,6 @@ TEST_CASE("populate matches Java", "[populate]") {
         INFO("col " << x << "," << z);
         CHECK(top == kHM_Sm32_20_m31_21[x * 16 + z]);
       }
-      // KNOWN GAP (M5 light engine, oracle-divergent): tall grass at world
-      // (-494,76,345), (-492,77,343), (-491,77,343) under the (-31,21) oak
-      // canopy. Same mechanism as above (live sky 6-7 vs oracle 8+).
       CHECK(hash_bytes(b) == -1265165294);
       CHECK(hash_meta(site.world.chunk_meta(-31, 21)) == 1194723037);
     }
@@ -1291,11 +1279,6 @@ TEST_CASE("populate matches Java", "[populate]") {
         INFO("col " << x << "," << z);
         CHECK(top == kHM_Sm32_m21_m31_m22[x * 16 + z]);
       }
-      // KNOWN GAP (M5 light engine, oracle-divergent): brown mushroom at
-      // world (-482,63,-338). Vanilla-faithful evolution gives live sky 9
-      // (leaves at 68 + swamp vine at 69 via relight), so the mushroom check
-      // (<13) passes; the oracle golden lacks it (needs sky 13+, unreachable
-      // given the pinned writes). Same adjudication note as above.
       CHECK(hash_bytes(b) == 675005268);
       CHECK(hash_meta(site.world.chunk_meta(-31, -22)) == -1636517549);
     }

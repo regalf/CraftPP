@@ -21,6 +21,7 @@
 #include "core/log.hpp"
 #include "core/random.hpp"
 #include "entity/controller.hpp"
+#include "entity/mob.hpp"
 #include "entity/player_sp.hpp"
 #include "render/frustum.hpp"
 #include "render/mesher.hpp"
@@ -35,6 +36,8 @@
 namespace {
 
 using craftpp::JavaRandom;
+using craftpp::entity::Controller;
+using craftpp::entity::ControllerCreative;
 using craftpp::entity::ControllerSP;
 using craftpp::entity::PlayerSP;
 using craftpp::world::BlockCollider;
@@ -205,9 +208,10 @@ void main() {
 constexpr const char* kDemoFrag = R"GLSL(
 #version 330 core
 in vec3 v_color;
+uniform float u_bright;
 out vec4 out_color;
 void main() {
-  out_color = vec4(v_color, 1.0);
+  out_color = vec4(v_color * u_bright, 1.0);
 }
 )GLSL";
 
@@ -250,10 +254,13 @@ int main(int argc, char** argv) {
   const int ground = surface_at(sx, sz);
   PlayerSP player(&world, "demo", 0);
   world.add_entity(&player);
+  world.set_spawn_point(sx + 0.5, ground, sz + 0.5);
   // Drop in from the sky (also demos falling); settles on its own.
   player.set_position_and_rotation(sx + 0.5, ground + 12.0 + 1.62, sz + 0.5, 0.0f, 0.0f);
-  ControllerSP controller(world, player);
-  craftpp::entity::ItemStack stone(1, 999, 0);
+  ControllerSP controller_sp(world, player);
+  ControllerCreative controller_cr(world, player);
+  craftpp::entity::Controller* controller = &controller_sp;
+  bool creative = false;
 
   if (glfwInit() == GLFW_FALSE) {
     craftpp::log_error("glfw init failed");
@@ -279,6 +286,7 @@ int main(int argc, char** argv) {
       return 1;
     }
     const int u_mvp = prog.uniform("u_mvp");
+    const int u_bright = prog.uniform("u_bright");
     std::map<std::pair<int, int>, craftpp::render::Tessellator> tess_map;
     for (int cx = -1; cx <= 1; ++cx) {
       for (int cz = -1; cz <= 1; ++cz) {
@@ -289,7 +297,9 @@ int main(int argc, char** argv) {
 
   // Minimal atlas: reuse M2's terrain.png loading path is app-side; the demo
   // renders untextured quads with per-face shade (no assets needed).
-  craftpp::log_info("controls: WASD move, mouse look, Space jump, Shift sneak, LMB mine, RMB place, ESC quit");
+  craftpp::log_info(
+      "controls: WASD move, mouse look, Space jump, Shift sneak, LMB mine, "
+      "RMB place held, 1-9 hotbar, G creative, ESC quit");
 
   double last_x = 0.0, last_y = 0.0;
   bool have_mouse = false;
@@ -351,15 +361,39 @@ int main(int argc, char** argv) {
       const bool hit = pick_block(world, ex, ey, ez, lx, ly, lz, 4.0, hx, hy, hz, side);
       const bool lmb = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
       const bool rmb = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-      if (hit && lmb && !lmb_was) controller.click_block(hx, hy, hz, side);
-      if (hit && lmb) controller.send_block_removing(hx, hy, hz, side);
-      if (!lmb) controller.reset_block_removing();
-      if (hit && rmb && !rmb_was) controller.send_place_block(stone, hx, hy, hz, side);
+      if (hit && lmb && !lmb_was) controller->click_block(hx, hy, hz, side);
+      if (hit && lmb) controller->send_block_removing(hx, hy, hz, side);
+      if (!lmb) controller->reset_block_removing();
+      if (hit && rmb && !rmb_was) {
+        // Place the held stack (survival consumes, creative restores).
+        if (auto* held = player.inventory.held()) {
+          if (held->has_value()) controller->send_place_block(held->value(), hx, hy, hz, side);
+        }
+      }
       lmb_was = lmb;
       rmb_was = rmb;
+      // Gamemode toggle (G) + hotbar 1-9.
+      static bool g_was = false;
+      const bool g_now = glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS;
+      if (g_now && !g_was) {
+        creative = !creative;
+        if (creative) {
+          ControllerCreative::enable_creative(player);
+          controller = &controller_cr;
+          craftpp::log_info("creative mode (fly: double-Space, instabreak)");
+        } else {
+          ControllerCreative::disable_creative(player);
+          controller = &controller_sp;
+          craftpp::log_info("survival mode");
+        }
+      }
+      g_was = g_now;
+      for (int k = 0; k < 9; ++k) {
+        if (glfwGetKey(window, GLFW_KEY_1 + k) == GLFW_PRESS) player.inventory.current = k;
+      }
 
       world.tick();  // world time + registered entities (player)
-      controller.update_controller();
+      if (!creative) controller_sp.update_controller();
       if (++tick_count % 20 == 0) {
         char buf[128];
         std::snprintf(buf, sizeof buf, "pos %.1f %.1f %.1f onGround %d", player.pos_x, player.pos_y,
@@ -373,7 +407,8 @@ int main(int argc, char** argv) {
     int w = 0, h = 0;
     glfwGetFramebufferSize(window, &w, &h);
     glViewport(0, 0, w, h);
-    glClearColor(0.74F, 0.84F, 1.0F, 1.0F);
+    const float daylight = world.daylight();
+    glClearColor(0.74F * daylight, 0.84F * daylight, 1.0F * daylight, 1.0F);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -388,12 +423,45 @@ int main(int argc, char** argv) {
 
     prog.use();
     prog.set_mat4(u_mvp, &vp[0][0]);
+    prog.set_float(u_bright, daylight);
     for (auto& [key, tess] : tess_map) {
       if (world.is_dirty(key.first, key.second)) {
         tess.upload(mesh_demo_chunk(world, key.first, key.second));
         world.clear_dirty(key.first, key.second);
       }
       tess.draw();
+    }
+    // Entities (mobs + drops) as plain boxes, rebuilt per frame.
+    {
+      craftpp::render::Mesh em;
+      auto box = [&](double cx, double cy, double cz, double hw, double hh, float r, float g,
+                     float b) {
+        const float x0 = cx - hw, x1 = cx + hw, y0 = cy, y1 = cy + hh, z0 = cz - hw, z1 = cz + hw;
+        add_quad(em, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0, r, g, b);
+        add_quad(em, x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1, r * 0.5f, g * 0.5f, b * 0.5f);
+        add_quad(em, x1, y1, z0, x0, y1, z0, x0, y0, z0, x1, y0, z0, r * 0.8f, g * 0.8f, b * 0.8f);
+        add_quad(em, x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, y0, z1, r * 0.8f, g * 0.8f, b * 0.8f);
+        add_quad(em, x0, y1, z1, x0, y1, z0, x0, y0, z0, x0, y0, z1, r * 0.6f, g * 0.6f, b * 0.6f);
+        add_quad(em, x1, y1, z0, x1, y1, z1, x1, y0, z1, x1, y0, z0, r * 0.6f, g * 0.6f, b * 0.6f);
+      };
+      for (auto& m : world.mobs()) {
+        if (!m || m->is_dead) continue;
+        const bool pig = dynamic_cast<craftpp::entity::Pig*>(m.get()) != nullptr;
+        if (pig) {
+          box(m->pos_x, m->pos_y, m->pos_z, 0.45, 0.9, 0.95f, 0.6f, 0.65f);
+        } else {
+          box(m->pos_x, m->pos_y, m->pos_z, 0.3, 1.8, 0.25f, 0.45f, 0.25f);
+        }
+      }
+      for (auto& it : world.items()) {
+        if (!it || it->is_dead) continue;
+        box(it->pos_x, it->pos_y, it->pos_z, 0.12, 0.25, 0.95f, 0.85f, 0.3f);
+      }
+      if (!em.vertices.empty()) {
+        craftpp::render::Tessellator etess;
+        etess.upload(em);
+        etess.draw();
+      }
     }
 
     glfwSwapBuffers(window);

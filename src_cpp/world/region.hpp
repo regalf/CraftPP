@@ -46,6 +46,8 @@ class RegionWorld {
   // maintained by relight + updateLightByType; missing chunk reads 0).
   int saved_sky(int x, int y, int z) const;
   int saved_block(int x, int y, int z) const;
+  // Synchronous full recompute at one cell (World.updateAllLightTypes).
+  void refresh_light(int x, int y, int z) { update_all_light_types(x, y, z); }
   // Full light like getFullBlockLightValue (max of saved sky/block).
   int full_light(int x, int y, int z) const;
   // 15 minus summed light opacity above (live scan, for diagnostics only).
@@ -54,7 +56,7 @@ class RegionWorld {
   bool can_see_sky(int x, int y, int z) const;
   // Mirrors Chunk.func_35840_c (getPrecipitationHeight): topmost solid or
   // liquid + 1, with -999 invalidation on writes and lazy rescan.
-  int precip_height(int x, int z);
+  int precip_height(int x, int z) const;
 
   // Dumps raw chunk bytes (Java layout) for hashing/comparison.
   std::vector<std::int8_t> chunk_bytes(int cx, int cz) const;
@@ -70,7 +72,7 @@ class RegionWorld {
     std::vector<std::uint8_t> block;
     // Chunk.heightMap + precipitationHeightMap + lowestBlockHeight.
     std::vector<std::uint8_t> height;
-    std::vector<int> precip;
+    mutable std::vector<int> precip;
     int lowest = kHeight - 1;
     // Chunk.updateSkylightColumns (set on writes; drained by the tick loop
     // via func_35841_j, which never runs during populate — stored only).

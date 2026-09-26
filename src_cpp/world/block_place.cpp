@@ -465,7 +465,22 @@ int item_max_stack(int item_id) {
   if (item_id < 256) return 64;
   if (tool_material(item_id) >= 0 || is_sword(item_id)) return 1;
   if (item_id >= 298 && item_id <= 317) return 1;  // armor
-  return 64;
+  switch (item_id) {
+    case 346:  // fishing rod
+    case 354:  // cake
+    case 355:  // bed
+    case 358:  // map
+    case 359:  // shears
+    case 261:  // bow (damageable, but explicit like the source classes)
+    case 373:  // potion
+      return 1;
+    case 332:  // snowball
+    case 344:  // egg
+    case 368:  // ender pearl
+      return 16;
+    default:
+      return 64;
+  }
 }
 
 int armor_value(int item_id) {

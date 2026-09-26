@@ -40,6 +40,31 @@ struct EditWorld : public craftpp::entity::EntityWorld {
   virtual void play_aux_sfx(int id, int x, int y, int z, int data) {}
   virtual void play_place_sound(const char* name, double x, double y, double z, float vol,
                                 float pitch) {}
+  // Live light queries for the M5 tick engine (stored nibbles like the
+  // engine; TestWorld keeps the fresh-world defaults).
+  virtual int saved_sky(int x, int y, int z) const { return 15; }
+  virtual int saved_block(int x, int y, int z) const { return 0; }
+  virtual bool can_see_sky(int x, int y, int z) const { return true; }
+  virtual int skylight_sub() const { return 0; }
+  // Synchronous light recompute hook (World.updateAllLightTypes); the live
+  // world runs the real BFS, test worlds keep the no-op.
+  virtual void relight_at(int x, int y, int z) {
+    (void)x;
+    (void)y;
+    (void)z;
+  }
+  // Precipitation height + biome temperature for live ice/snow (test
+  // worlds: -1/warm = no formation).
+  virtual int precip_height(int x, int z) const {
+    (void)x;
+    (void)z;
+    return -1;
+  }
+  virtual float temperature(int x, int z) const {
+    (void)x;
+    (void)z;
+    return 1.0f;
+  }
 };
 
 // ---- block tables (transcribed from Block.java + subclasses) ----

@@ -321,10 +321,10 @@ void RegionWorld::relight_block(int x, int y, int z) {
   }
 }
 
-int RegionWorld::precip_height(int x, int z) {
+int RegionWorld::precip_height(int x, int z) const {
   // Mirrors Chunk.func_35840_c with lazy -999 rescan (Material.isSolid raw:
   // material_is_solid matches except web, which never generates).
-  ChunkData* c = find(x >> 4, z >> 4);
+  const ChunkData* c = find(x >> 4, z >> 4);
   if (c == nullptr) return -1;
   const std::size_t col = col_index(x & 15, z & 15);
   int v = c->precip[col];
@@ -412,35 +412,35 @@ void RegionWorld::update_light_by_type(bool sky, int x, int y, int z) {
         }
       }
     }
-    // Increase spread.
-    while (rd < wr) {
-      const int e = light_list_[rd++];
-      const int px = (e & 63) - 32 + x;
-      const int py = ((e >> 6) & 63) - 32 + y;
-      const int pz = ((e >> 12) & 63) - 32 + z;
-      const int cur = get_saved(sky, px, py, pz);
-      const int pid = get_id(px, py, pz);
-      int pop = bid::light_opacity(pid);
-      if (pop == 0) pop = 1;
-      const int nv = sky ? compute_sky(cur, px, py, pz, pid, pop)
-                         : compute_block(cur, px, py, pz, pid, pop);
-      if (nv == cur) continue;
-      set_saved(sky, px, py, pz, nv);
-      if (nv <= cur) continue;
-      int ddx = px - x, ddy = py - y, ddz = pz - z;
-      if (ddx < 0) ddx = -ddx;
-      if (ddy < 0) ddy = -ddy;
-      if (ddz < 0) ddz = -ddz;
-      if (ddx + ddy + ddz >= 17) continue;
-      if (wr >= static_cast<int>(light_list_.size()) - 6) continue;
-      const int qx[6] = {px - 1, px + 1, px, px, px, px};
-      const int qy[6] = {py, py, py - 1, py + 1, py, py};
-      const int qz[6] = {pz, pz, pz, pz, pz - 1, pz + 1};
-      for (int k = 0; k < 6; ++k) {
-        if (get_saved(sky, qx[k], qy[k], qz[k]) < nv) {
-          light_list_[wr++] = (qx[k] - x + 32) + ((qy[k] - y + 32) << 6) +
-                              ((qz[k] - z + 32) << 12);
-        }
+  }  // end decrease flood (else-if want < saved)
+  // Increase spread (runs for both branches, like the source while loop).
+  while (rd < wr) {
+    const int e = light_list_[rd++];
+    const int px = (e & 63) - 32 + x;
+    const int py = ((e >> 6) & 63) - 32 + y;
+    const int pz = ((e >> 12) & 63) - 32 + z;
+    const int cur = get_saved(sky, px, py, pz);
+    const int pid = get_id(px, py, pz);
+    int pop = bid::light_opacity(pid);
+    if (pop == 0) pop = 1;
+    const int nv =
+        sky ? compute_sky(cur, px, py, pz, pid, pop) : compute_block(cur, px, py, pz, pid, pop);
+    if (nv == cur) continue;
+    set_saved(sky, px, py, pz, nv);
+    if (nv <= cur) continue;
+    int ddx = px - x, ddy = py - y, ddz = pz - z;
+    if (ddx < 0) ddx = -ddx;
+    if (ddy < 0) ddy = -ddy;
+    if (ddz < 0) ddz = -ddz;
+    if (ddx + ddy + ddz >= 17) continue;
+    if (wr >= static_cast<int>(light_list_.size()) - 6) continue;
+    const int qx[6] = {px - 1, px + 1, px, px, px, px};
+    const int qy[6] = {py, py, py - 1, py + 1, py, py};
+    const int qz[6] = {pz, pz, pz, pz, pz - 1, pz + 1};
+    for (int k = 0; k < 6; ++k) {
+      if (get_saved(sky, qx[k], qy[k], qz[k]) < nv) {
+        light_list_[wr++] =
+            (qx[k] - x + 32) + ((qy[k] - y + 32) << 6) + ((qz[k] - z + 32) << 12);
       }
     }
   }

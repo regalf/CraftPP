@@ -35,6 +35,7 @@ inline constexpr int kObsidian = 49;
 inline constexpr int kFire = 51;
 inline constexpr int kChest = 54;
 inline constexpr int kDiamondOre = 56;
+inline constexpr int kDiamondBlock = 57;
 inline constexpr int kTnt = 46;inline constexpr int kFarmland = 60;
 inline constexpr int kSignPost = 63;
 inline constexpr int kDoorWood = 64;
