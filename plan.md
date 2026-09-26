@@ -127,6 +127,31 @@ terrain+carve+populate+light chunks behind `EditWorld`, world time,
 entity registry at 20 TPS; demo migrated to it). Next: TileEntity,
 random ticks, mobs.
 
+### M5b — Streaming + multithread (dopo il singleplayer giocabile)
+Il mondo esce dal 3×3 fisso: chunk generati attorno al giocatore mentre
+cammina (provide on demand + unload oltre il raggio), e la generazione va
+off-thread perché non deve mai bloccare il tick.
+
+Ordine di split (uno alla volta, suite verde tra l'uno e l'altro):
+1. **ChunkGen/IO worker**: un `std::jthread` + coda jobs (richieste provide
+   per (cx,cz,seed)). Il worker genera terrain+carve+install+populate su
+   copie private e consegna il chunk pronto via `std::move`; il Main lo
+   installa e lo marca dirty per il remesh. Mai RNG condivisi (regola
+   architettura: un `JavaRandom` privato per job, seed `worldSeed ^ hash`).
+2. **Meshing off-thread**: CPU meshing sullo snapshot `16x16 + 1 bordo`
+   (mai sul chunk live), upload VBO sul thread Render.
+3. **Render split** (ultimo): context GL dedicato; il Main resta l'unico
+   writer del `World` con tick Java-identico a 20 TPS così una futura
+   sessione server non desynca.
+
+Resta single-thread finché non serve: tutto il lavoro M0–M5 (parità
+differenziale) richiede determinismo totale — l'ordine degli update
+luce/fisica deve essere riproducibile al 100%.
+
+Exit: camminata infinita sullo stesso seed senza hitches; stessi chunk
+della generazione single-thread (byte-identici a parità di seed);
+`ctest` verde con thread sanitizer pulito dove disponibile.
+
 ### M6 — Audio + polish
 `SoundManager` on OpenAL-soft (`stb_vorbis`, `dr_wav`), `CodecMus`/`MusInputStream`
 XOR decode for `streaming/*.mus` jukebox discs, positional audio, particles,
