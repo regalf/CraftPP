@@ -27,6 +27,8 @@
 #include "entity/controller.hpp"
 #include "entity/mob.hpp"
 #include "entity/player_sp.hpp"
+#include "gui/font.hpp"
+#include "gui/hud.hpp"
 #include "render/frustum.hpp"
 #include "render/mesher.hpp"
 #include "render/model.hpp"
@@ -299,6 +301,32 @@ int main(int argc, char** argv) {
     };
     load_skin("/mob/pig.png", pig_tex);
     load_skin("/mob/zombie.png", zombie_tex);
+  }
+  // HUD assets: hotbar chrome, icons, font.
+  craftpp::render::Texture gui_tex, icons_tex, font_tex;
+  craftpp::gui::Font font;
+  {
+    craftpp::render::Image img;
+    if (!craftpp::render::load_png((args.assets + "/gui/gui.png").c_str(), img, err) ||
+        !gui_tex.upload_nearest(img)) {
+      craftpp::log_error("cannot load /gui/gui.png: " + err);
+      return 1;
+    }
+    if (!craftpp::render::load_png((args.assets + "/gui/icons.png").c_str(), img, err) ||
+        !icons_tex.upload_nearest(img)) {
+      craftpp::log_error("cannot load /gui/icons.png: " + err);
+      return 1;
+    }
+    if (!craftpp::render::load_png((args.assets + "/font/default.png").c_str(), img, err) ||
+        !font.load_glyphs(img.rgba.data(), img.width, img.height) ||
+        !font_tex.upload_nearest(img)) {
+      craftpp::log_error("cannot load font/default.png: " + err);
+      return 1;
+    }
+    if (!font.load_allowed(args.assets + "/font.txt")) {
+      craftpp::log_error("cannot load font.txt");
+      return 1;
+    }
   }
     craftpp::render::ShaderProgram terrain_prog;
     if (!terrain_prog.link(craftpp::render::kTerrainVert, craftpp::render::kTerrainFrag, err)) {
@@ -578,6 +606,51 @@ int main(int argc, char** argv) {
           etess.upload(em);
           etess.draw();
         }
+      }
+
+      // HUD (GuiIngame overlay): ortho 2D, no fog, alpha blend.
+      {
+        craftpp::gui::HudState hs;
+        hs.width = w;
+        hs.height = h;
+        hs.tick = tick_count;
+        hs.survival_hud = !creative;
+        hs.health = player.health;
+        hs.food = player.food.food_level;
+        hs.saturation = player.food.saturation;
+        hs.armor = player.inventory.armor_value();
+        hs.air = player.air_supply;
+        hs.in_water = player.in_water;
+        hs.current_item = player.inventory.current;
+        hs.xp_frac = player.current_xp;
+        hs.xp_level = player.player_level;
+        const auto hud = craftpp::gui::build_hud(hs, font);
+        const glm::mat4 ortho =
+            glm::ortho(0.0F, static_cast<float>(w), static_cast<float>(h), 0.0F, -1.0F, 1.0F);
+        const glm::mat4 ident(1.0F);
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        terrain_prog.use();
+        terrain_prog.set_mat4(t_mvp, &ortho[0][0]);
+        terrain_prog.set_mat4(t_view, &ident[0][0]);
+        terrain_prog.set_float(t_fog_start, 1.0e9F);
+        terrain_prog.set_float(t_fog_end, 2.0e9F);
+        terrain_prog.set_int(t_tex, 0);
+        auto draw_2d = [&](const craftpp::render::Mesh& m,
+                           const craftpp::render::Texture& tex) {
+          if (m.vertices.empty()) return;
+          tex.bind(0);
+          craftpp::render::Tessellator tess;
+          tess.upload(m);
+          tess.draw();
+        };
+        draw_2d(hud.chrome, gui_tex);
+        draw_2d(hud.icons, icons_tex);
+        draw_2d(hud.shadow, font_tex);
+        draw_2d(hud.text, font_tex);
+        glDisable(GL_BLEND);
+        glEnable(GL_DEPTH_TEST);
       }
 
       glfwSwapBuffers(window);

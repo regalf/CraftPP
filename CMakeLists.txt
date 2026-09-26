@@ -55,6 +55,8 @@ add_library(craftpp_core
   src_cpp/render/stb_impl.cpp
   src_cpp/render/tessellator.cpp
   src_cpp/gui/crafting.cpp
+  src_cpp/gui/font.cpp
+  src_cpp/gui/hud.cpp
 )
 target_include_directories(craftpp_core PUBLIC src_cpp third_party ${EPOXY_INCLUDE_DIRS})
 target_link_libraries(craftpp_core PUBLIC ZLIB::ZLIB glm::glm ${EPOXY_LIBRARIES})
@@ -99,6 +101,7 @@ add_executable(craftpp_tests
   tests/test_textures.cpp
   tests/test_mesher_live.cpp
   tests/test_model.cpp
+  tests/test_font.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
 catch_discover_tests(craftpp_tests)
