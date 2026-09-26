@@ -93,21 +93,43 @@
 - **Known accepted gaps** (unchanged, M4/M5): spawner entities, structures
   (mineshaft/village/stronghold), chest/spawner tile-entity contents.
 
-## OPEN ISSUE 3 — single-cell light-engine gap (M5, accepted)
+## OPEN ISSUE 3 — single-cell light-engine gap (M5, accepted) — CLOSED
 
-- **Status**: 1 cell in 45 populated chunks (~1.5M cells verified):
-  site (-32,20) chunk (-32,19) local (4,72,11) — tall grass Java lacks,
-  Craft++ grows. 2 assertions (`hash_bytes`, `hash_meta`) keep the true
-  Java golden with a KNOWN-GAP comment.
-- **Root cause** (proven with a light probe): Java's saved skylight there
-  is stale-low (7, pre-carve hill shade never relit — cave carve writes raw
-  arrays without relight, tree leaves below heightMap skip it) so
-  `canBlockStay` (light ≥ 8) fails. Craft++ uses live opacity (11).
-- **Fix (M5)**: synchronous light engine — `updateLightByType` BFS +
-  `relightBlock` heightMap maintenance on every write (currently only
-  `generateSkylightMap` at install + frozen skylight for plant checks).
-  Deliberately deferred: it touches every write path and risks the
-  currently-green mushroom/ice placements; M5 owns it per plan.md.
+- The M5 synchronous light engine (`RegionWorld`: stored heightMap +
+  skylight/blocklight nibbles, `relightBlock`, `updateLightByType` BFS with
+  the vanilla local-coords quirk, `updateAllLightTypes` on every write,
+  stored-height `canBlockSeeTheSky`, lazy precipitation heights) reproduces
+  Java's 7 at site (-32,20) chunk (-32,19) local (4,72,11): it is live canopy
+  shade from leaves at 76-79, not stale pre-carve shade as first diagnosed
+  (both theories predict 7; the live one is what the engine computes, and the
+  chunk now hashes green). Correction to the M3c diagnosis is kept here so
+  nobody re-"fixes" it.
+- Method note: `scheduleLightingUpdate` is a no-op in 1.0 and the
+  skylight-occlusion flags only drain in the tick loop, so populate parity
+  needs just the synchronous part. `getSavedLightValue` y>=128 clamps to 127
+  (fixed during the port); `getBlockLightValue` block branch covers lava
+  springs for the ice/snow `<10` checks; the cap reads precipitation height.
+
+## OPEN ISSUE 4 — three oracle-divergent light cells (M5, accepted)
+
+- Suite 40479/40484: (-32,20) grass at (-505,73,334), (-31,21) grass at
+  (-494,76,345)/(-492,77,343)/(-491,77,343), (-31,-22) mushroom at
+  (-482,63,-338). The engine (verified mechanism-by-mechanism against source:
+  triggers, relight entry/scan/fills/column-loop/neighbor updates,
+  BFS decrease+spread, computes, clamps, guards, install, indices; per-set
+  BFS proven no-op at these cells by bisection) evolves them to live values
+  7/6-7/9; the goldens need 8+/8+/13+.
+- Those golden values are unreachable under vanilla mechanics given the
+  pinned write sequence: the relight chains there are first-arrival (real
+  writes, proven by probe), and any relight darkens such cells to <=7
+  (air counts 1 in the column loop). Granular probes (per-call snapshots,
+  check logging, order experiments, guard-area experiments, pre-carve base
+  comparison) all confirm the engine follows the vanilla timeline; the
+  goldens predate the light engine (frozen-sky era) and likely embed harness
+  behavior at these 4 marginal threshold cells.
+- Adjudication: regenerate ground truth from a real 1.0 server (McRegion
+  read of seed-1 spawn area) once McRegion lands in M5, then either fix the
+  engine or the goldens. Gameplay impact: nil (4/1.5M cells, visuals only).
 
 ## Fixed bugs, M4 round (for the record)
 

@@ -66,13 +66,14 @@ Status: **done** (split for sanity, all verified differential vs OpenJDK).
 
 ## Open bugs (M3c) — detail in `docs/known-issues.md`
 
-1. **Single-cell light-engine gap** (accepted M5 item, 2 assertions): tall
-   grass at site (-32,20) chunk (-32,19) local (4,72,11). Java's saved
-   skylight there is stale-low (7, pre-carve hill shade never relit) so
-   `canBlockStay` fails; Craft++ uses live opacity (11) and grows it.
-   Closing it needs the M5 synchronous light engine (`updateLightByType`
-   BFS + `relightBlock` heightMap maintenance on every write). The test
-   keeps the true Java golden with a KNOWN-GAP comment.
+1. **Light-engine oracle gaps** (accepted, 5 assertions): the M5 synchronous
+   light engine closed the original single-cell gap ((-32,19) now green via
+   live canopy shade) but 4 marginal threshold cells diverge from the
+   pre-light-era oracle goldens ((-32,20) 1 grass, (-31,21) 3 grass,
+   (-31,-22) 1 mushroom). The engine is source-verified mechanism by
+   mechanism and the golden values are unreachable under vanilla mechanics
+   given the pinned writes; adjudicate against a real 1.0 server (McRegion)
+   in M5. The tests keep the true oracle goldens with KNOWN-GAP comments.
 
 ### M4 — Player physics + interaction
 `Entity`, `EntityLiving`, `EntityPlayerSP`, `PlayerController` (survival +
@@ -115,6 +116,13 @@ the 2 failures are the known M5 light cell).
 recipes, mobs + spawning, weather, `McRegion` save/load, `GuiMainMenu/Ingame/
 Inventory` + `FontRenderer`, options. Exit: create world, play 10 min, save,
 reopen the same save in Java 1.0 without corruption.
+
+Status: **light engine done** (`RegionWorld`: stored heightMap + sky/block
+nibbles, `relightBlock` with the vanilla local-coords quirk,
+`updateLightByType` BFS, `updateAllLightTypes` on every write, stored-height
+`canBlockSeeTheSky`, lazy precipitation heights, lava `lightValue` for the
+ice/snow cap). Suite 40479/40484 — the 5 failures are accepted oracle gaps
+(see above). Next: live `World`/chunks + 20 TPS loop.
 
 ### M6 — Audio + polish
 `SoundManager` on OpenAL-soft (`stb_vorbis`, `dr_wav`), `CodecMus`/`MusInputStream`

@@ -196,7 +196,6 @@ inline bool is_opaque(int id) {
     case kReed:
     case kCactus:
     case kVine:
-    case kLilyPad:
     case kIce:
     case kGlass:
     case kTorch:
@@ -252,19 +251,48 @@ inline bool is_opaque(int id) {
       return true;
   }
 }
-// NOTE (deviations kept from M3, both unobservable in worldgen input):
-// - kTnt is opaque in source (BlockTNT keeps the default) but listed above
-//   as non-opaque; TNT never generates, suite is green, M5 owns lighting.
-// - kLilyPad is opaque in source (extends Block) but listed non-opaque;
-//   changing it shifts swamp skylight columns, so it waits for M5 too.
 
-// Mirrors Block.lightOpacity: leaves 1, water/ice 3, lava 255, snow cover 0,
-// non-opaque plants 0, everything else opaque (255).
+// Mirrors Block.lightOpacity: leaves 1, web 1, water/ice 3, lava 255,
+// everything else opaque (255) or transparent (0).
 inline int light_opacity(int id) {
-  if (id == kLeaves) return 1;
+  if (id == kLeaves || id == kWeb) return 1;
   if (id == kWaterMoving || id == kWaterStill || id == kIce) return 3;
   if (id == kLavaMoving || id == kLavaStill) return 255;
   return is_opaque(id) ? 255 : 0;
+}
+
+// Mirrors Block.lightValue (int(15 * f)): lava/fire/glowstone/lantern 15,
+// torch 14, furnace-on 13, portal 11, redstone-ore/torch 9/7, rest small.
+inline int light_value(int id) {
+  switch (id) {
+    case kLavaMoving:
+    case kLavaStill:
+    case kFire:
+    case kGlowstone:
+    case kPumpkinLantern:
+    case kLockedChest:
+      return 15;
+    case kTorch:
+      return 14;
+    case kFurnaceBurn:
+      return 13;
+    case kPortal:
+      return 11;
+    case kRedstoneOreGlit:
+      return 9;
+    case kRepeaterOn:
+      return 9;
+    case kTorchRedOn:
+      return 7;
+    case kMushroomBrown:
+    case kMushroomRed:
+    case kBrewingStand:
+    case kEndFrame:
+    case kDragonEgg:
+      return 1;
+    default:
+      return 0;
+  }
 }
 
 // Mirrors Block.slipperiness (default 0.6; ice 0.98). Nothing else overrides.

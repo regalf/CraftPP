@@ -128,14 +128,14 @@ bool FeatureGen::flowers(int x, int y, int z, int id, JavaRandom& rand) {
     if (id == bid::kFlowerYellow || id == bid::kFlowerRed) {
       if (flower_can_stay(px, py, pz)) w_.set_id(px, py, pz, id);
     } else {
-      // BlockMushroom.canBlockStay: mycelium below, or (light < 13 and
-      // opaque below). Fresh-world surface light is 15.
+      // BlockMushroom.canBlockStay: mycelium below, or (full light < 13 and
+      // opaque below). Saved block light matters near lava.
       const int below = w_.get_id(px, py - 1, pz);
       bool stay = false;
       if (below == bid::kMycelium) {
         stay = true;
       } else if (py >= 0 && py < RegionWorld::kHeight) {
-        stay = w_.sky_light(px, py, pz) < 13 && bid::is_opaque(below);
+        stay = w_.full_light(px, py, pz) < 13 && bid::is_opaque(below);
       }
       if (stay) w_.set_id(px, py, pz, id);
     }
@@ -373,7 +373,7 @@ bool FeatureGen::lake(int x, int y, int z, int id, JavaRandom& rand) {
     for (int iz = 0; iz < 16; ++iz) {
       for (int iy = 4; iy < 8; ++iy) {
         if (at(ix, iy, iz) && w_.get_id(lx + ix, ly + iy - 1, lz + iz) == bid::kDirt &&
-            w_.sky_light(lx + ix, ly + iy, lz + iz) > 0) {
+            w_.saved_sky(lx + ix, ly + iy, lz + iz) > 0) {
           const std::vector<BiomeId> b = chunks_.block_biomes(lx + ix, lz + iz, 1, 1);
           const int top = biome_def(b[0]).top_block;
           w_.set_id(lx + ix, ly + iy - 1, lz + iz,
@@ -1309,27 +1309,31 @@ void populate_chunk(RegionWorld& world, const ChunkManager& chunks, std::int64_t
   gen.decorate(b[0], cx * 16, cz * 16, rand);
 
   // Ice/snow cap over the +8 quadrant (setBlockWithNotify: notifies like the
-  // source; SpawnerAnimals has no block effects and is skipped).
+  // source; SpawnerAnimals has no block effects and is skipped). The source
+  // reads func_35461_e (precipitation height, not the heightMap).
   const std::vector<float> cap_temps = chunks.temperatures(cx * 16 + 8, cz * 16 + 8, 16, 16);
   for (int lx = 0; lx < 16; ++lx) {
     for (int lz = 0; lz < 16; ++lz) {
       const int x = cx * 16 + 8 + lx;
       const int z = cz * 16 + 8 + lz;
-      const int top = world.height_value(x, z);
+      const int top = world.precip_height(x, z);
       const float temp = cap_temps[static_cast<std::size_t>(lx + lz * 16)];
-      // func_40471_p at (x, top-1, z).
-      if (temp <= 0.15F) {
+      // func_40471_p at (x, top-1, z): temp + saved block light < 10 +
+      // still water meta 0.
+      if (temp <= 0.15F && world.saved_block(x, top - 1, z) < 10) {
         const int mid = world.get_id(x, top - 1, z);
         if ((mid == bid::kWaterStill || mid == bid::kWaterMoving) &&
             world.get_meta(x, top - 1, z) == 0) {
           gen.place_ice_snow(x, top - 1, z, bid::kIce);
         }
       }
-      // func_40478_r at (x, top, z).
-      if (temp <= 0.15F && world.get_id(x, top, z) == 0) {
+      // func_40478_r at (x, top, z): temp + block light < 10 + air +
+      // snow.canPlaceBlockAt (below opaque cube + Material.getIsSolid).
+      if (temp <= 0.15F && world.saved_block(x, top, z) < 10 &&
+          world.get_id(x, top, z) == 0) {
         const int below = world.get_id(x, top - 1, z);
         if (below != 0 && below != bid::kIce && bid::is_opaque(below) &&
-            bid::material_solid(below)) {
+            bid::material_is_solid(below)) {
           gen.place_ice_snow(x, top, z, bid::kSnowCover);
         }
       }

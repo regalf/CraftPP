@@ -85,9 +85,10 @@ class FeatureGen {
   // Placement predicates mirroring Block.canBlockStay/canPlaceBlockAt.
   bool flower_can_stay(int x, int y, int z) const;
   bool flower_lit(int x, int y, int z) const {
-    // getFullBlockLightValue uses the SAVED (install-time frozen) skylight;
-    // block light is 0 in a fresh world. canBlockSeeTheSky is heightMap-based.
-    return w_.saved_sky(x, y, z) >= 8 || w_.can_see_sky(x, y, z);
+    // getFullBlockLightValue = max of the SAVED sky/block nibbles (block
+    // light is live: lava springs/springs update it). canBlockSeeTheSky is
+    // stored-heightMap-based.
+    return w_.full_light(x, y, z) >= 8 || w_.can_see_sky(x, y, z);
   }
   bool flower_soil(int id) const { return id == bid::kGrass || id == bid::kDirt || id == bid::kFarmland; }
   bool reed_can_place(int x, int y, int z) const;
