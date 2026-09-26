@@ -55,6 +55,28 @@ TEST_CASE("mesh_live culls borders against provided neighbours", "[mesher]") {
   CHECK(joined.vertices.size() < solo.vertices.size());
 }
 
+TEST_CASE("mesh_live renders faces behind leaves (fancy culling)", "[mesher]") {
+  craftpp::render::Mesher m;
+  craftpp::world::RegionWorld w;
+  std::vector<std::int8_t> raw(16 * 128 * 16, 0);
+  raw[(8 * 16 + 8) * 128 + 64] = 1;   // stone
+  raw[(8 * 16 + 8) * 128 + 65] = 18;  // leaves on top
+  w.ensure_chunk(0, 0, raw.data());
+  const auto mesh = m.mesh_live(w, 0, 0);
+  // Stone top face at y=65 must exist (visible through leaf holes).
+  bool stone_top = false;
+  for (std::size_t i = 0; i < mesh.indices.size(); i += 3) {
+    const auto& a = mesh.vertices[mesh.indices[i]];
+    const auto& b = mesh.vertices[mesh.indices[i + 1]];
+    const auto& c = mesh.vertices[mesh.indices[i + 2]];
+    if (a.y == 65.0F && b.y == 65.0F && c.y == 65.0F) {
+      // Stone tile 1 (u in [16/256, 32/256)), not leaves tile 52.
+      if (a.u >= 0.0626F && a.u < 0.125F) stone_top = true;
+    }
+  }
+  CHECK(stone_top);
+}
+
 TEST_CASE("mesh_live renders plants as cross quads", "[mesher]") {
   craftpp::render::Mesher m;
   auto w = flat_world();

@@ -175,7 +175,8 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
                     z + 1 - o, b, b, b, u0, u1, v0, v1, us, vs);
           continue;
         }
-        const bool occluding = world::bid::is_opaque(id) && !water;
+        const bool leaves = (id == 18);
+        const bool occluding = world::bid::is_opaque(id) && !leaves && !water;
         for (const FaceDesc& f : kFaces) {
           const int nx = x + f.nx, ny = y + f.ny, nz = z + f.nz;
           const int nid = (ny < 0 || ny >= world::RegionWorld::kHeight)
@@ -183,7 +184,9 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
                               : world.get_id(nx, ny, nz);
           bool emit = false;
           if (occluding) {
-            emit = !world::bid::is_opaque(nid) || nid == 8 || nid == 9;
+            // shouldSideBeRendered: render unless the neighbour is an
+            // opaque cube; fancy leaves never occlude (cutout holes).
+            emit = !world::bid::is_opaque(nid) || nid == 18 || nid == 8 || nid == 9;
           } else if (water) {
             emit = nid == 0;
           } else {
