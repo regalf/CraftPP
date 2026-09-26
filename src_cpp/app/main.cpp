@@ -25,7 +25,7 @@
 #include "core/log.hpp"
 #include "core/random.hpp"
 #include "entity/controller.hpp"
-#include "entity/mob.hpp"
+#include "entity/pig.hpp"
 #include "entity/player_sp.hpp"
 #include "gui/font.hpp"
 #include "gui/hud.hpp"

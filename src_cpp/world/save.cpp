@@ -8,7 +8,8 @@
 #include <map>
 #include <stdexcept>
 
-#include "entity/mob.hpp"
+#include "entity/pig.hpp"
+#include "entity/zombie.hpp"
 #include "entity/player.hpp"
 #include "world/live.hpp"
 #include "world/mcregion.hpp"

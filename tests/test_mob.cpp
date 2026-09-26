@@ -1,7 +1,8 @@
 // Mobs: pig/zombie spawn validity, zombie daylight burn, drops, spawning.
 #include <catch2/catch_test_macros.hpp>
 #include "entity/controller.hpp"
-#include "entity/mob.hpp"
+#include "entity/pig.hpp"
+#include "entity/zombie.hpp"
 #include "entity/player.hpp"
 #include "entity/player_sp.hpp"
 #include "world/live.hpp"

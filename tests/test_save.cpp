@@ -8,7 +8,8 @@
 #include <string>
 
 #include "core/nbt.hpp"
-#include "entity/mob.hpp"
+#include "entity/pig.hpp"
+#include "entity/zombie.hpp"
 #include "entity/player.hpp"
 #include "world/blocks.hpp"
 #include "world/live.hpp"

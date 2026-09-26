@@ -45,7 +45,9 @@ add_library(craftpp_core
   src_cpp/entity/items.cpp
   src_cpp/entity/player.cpp
   src_cpp/entity/player_sp.cpp
-  src_cpp/entity/mob.cpp
+  src_cpp/entity/mob_loot.cpp
+  src_cpp/entity/pig.cpp
+  src_cpp/entity/zombie.cpp
   src_cpp/entity/controller.cpp
   src_cpp/render/mesher.cpp
   src_cpp/render/model.cpp
