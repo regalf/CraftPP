@@ -29,6 +29,7 @@
 #include "render/tessellator.hpp"
 #include "render/texture.hpp"
 #include "world/chunk_manager.hpp"
+#include "world/live.hpp"
 #include "world/provider.hpp"
 
 namespace {
@@ -37,99 +38,10 @@ using craftpp::JavaRandom;
 using craftpp::entity::ControllerSP;
 using craftpp::entity::PlayerSP;
 using craftpp::world::BlockCollider;
-using craftpp::world::edit::EditWorld;
+using craftpp::world::LiveWorld;
 
-int to_raw(craftpp::world::BlockId b) {
-  using craftpp::world::BlockId;
-  switch (b) {
-    case BlockId::Stone:
-      return 1;
-    case BlockId::Grass:
-      return 2;
-    case BlockId::Dirt:
-      return 3;
-    case BlockId::Bedrock:
-      return 7;
-    case BlockId::Water:
-      return 9;
-    case BlockId::Sand:
-      return 12;
-    case BlockId::Ice:
-      return 79;
-    default:
-      return 0;
-  }
-}
-
-craftpp::world::BlockId from_raw(int id) {
-  using craftpp::world::BlockId;
-  switch (id) {
-    case 1:
-      return BlockId::Stone;
-    case 2:
-      return BlockId::Grass;
-    case 3:
-      return BlockId::Dirt;
-    case 7:
-      return BlockId::Bedrock;
-    case 9:
-      return BlockId::Water;
-    case 12:
-      return BlockId::Sand;
-    case 79:
-      return BlockId::Ice;
-    default:
-      return BlockId::Air;
-  }
-}
-
-// 3x3 generated chunks around (0,0). Metadata always 0 (mesher has none).
-struct DemoWorld : EditWorld {
-  std::map<std::pair<int, int>, craftpp::world::Chunk> chunks;
-  std::map<std::pair<int, int>, bool> dirty;
-  JavaRandom wrand;
-  BlockCollider col;
-
-  craftpp::world::Chunk* at(int cx, int cz) {
-    auto it = chunks.find({cx, cz});
-    return it == chunks.end() ? nullptr : &it->second;
-  }
-  int block_id(int x, int y, int z) const override {
-    if (y < 0 || y >= 128) return 0;
-    int cx = x >> 4, cz = z >> 4;
-    auto it = chunks.find({cx, cz});
-    if (it == chunks.end()) return 0;
-    return to_raw(it->second.get(x - cx * 16, y, z - cz * 16));
-  }
-  int block_meta(int, int, int) const override { return 0; }
-  void set_raw(int x, int y, int z, int id, int meta) override {
-    (void)meta;
-    if (y < 0 || y >= 128) return;
-    int cx = x >> 4, cz = z >> 4;
-    auto it = chunks.find({cx, cz});
-    if (it == chunks.end()) return;
-    it->second.set(x - cx * 16, y, z - cz * 16, from_raw(id));
-    dirty[{cx, cz}] = true;
-  }
-  bool chunks_exist(int, int, int, int, int, int) const override { return true; }
-  bool is_normal_cube(int x, int y, int z) const override {
-    const int id = block_id(x, y, z);
-    return craftpp::world::bid::material_opaque(id) &&
-           craftpp::world::bid::renders_as_normal(id);
-  }
-  bool solid_side(int x, int y, int z, bool missing) const override {
-    (void)missing;
-    return is_normal_cube(x, y, z);
-  }
-  bool material_solid_at(int x, int y, int z) const override {
-    return craftpp::world::bid::material_is_solid(block_id(x, y, z));
-  }
-  JavaRandom& world_rand() override { return wrand; }
-  BlockCollider& collider() override { return col; }
-};
-
-// Full-cube voxel pick (terrain here is full cubes; shapes are M5).
-bool pick_block(DemoWorld& w, double ex, double ey, double ez, double dx, double dy, double dz,
+// Full-cube voxel pick (most terrain here is full cubes; shapes are M5).
+bool pick_block(LiveWorld& w, double ex, double ey, double ez, double dx, double dy, double dz,
                 double reach, int& hx, int& hy, int& hz, int& side) {
   int cx = static_cast<int>(std::floor(ex));
   int cy = static_cast<int>(std::floor(ey));
@@ -218,6 +130,21 @@ void base_color(int id, float& r, float& g, float& b) {
       g = 0.85f;
       b = 0.95f;
       return;  // ice
+    case 17:
+      r = 0.35f;
+      g = 0.25f;
+      b = 0.12f;
+      return;  // log
+    case 18:
+      r = 0.2f;
+      g = 0.45f;
+      b = 0.15f;
+      return;  // leaves
+    case 8:
+      r = 0.2f;
+      g = 0.35f;
+      b = 0.9f;
+      return;  // water (moving)
     default:
       r = 0.53f;
       g = 0.38f;
@@ -226,7 +153,7 @@ void base_color(int id, float& r, float& g, float& b) {
   }
 }
 
-craftpp::render::Mesh mesh_demo_chunk(DemoWorld& w, int cx, int cz) {
+craftpp::render::Mesh mesh_demo_chunk(LiveWorld& w, int cx, int cz) {
   using craftpp::render::Mesh;
   Mesh m;
   for (int lx = 0; lx < 16; ++lx) {
@@ -292,25 +219,9 @@ int main(int argc, char** argv) {
     if (std::strcmp(argv[i], "--seed") == 0 && i + 1 < argc) seed = std::atoll(argv[++i]);
   }
 
-  DemoWorld world;
-  world.wrand.set_seed(1234);
-  {
-    craftpp::world::ChunkManager manager(seed);
-    craftpp::world::TerrainProvider provider(manager, seed);
-    for (int cx = -1; cx <= 1; ++cx) {
-      for (int cz = -1; cz <= 1; ++cz) {
-        provider.set_chunk_seed(cx, cz);
-        std::vector<std::int8_t> raw;
-        provider.generate_terrain(cx, cz, raw);
-        provider.replace_biome_blocks(cx, cz, raw, manager.block_biomes(cx, cz, 16, 16));
-        craftpp::world::Chunk chunk;
-        craftpp::world::fill_from_raw(chunk, raw.data());
-        world.chunks[{cx, cz}] = chunk;
-        world.dirty[{cx, cz}] = true;
-      }
-    }
-  }
-  craftpp::log_info("demo world ready (3x3 chunks, no caves yet)");
+  LiveWorld world(seed);
+  world.provide_area(-1, -1, 1, 1);  // terrain + caves + populate + light
+  craftpp::log_info("demo world ready (3x3 live chunks: caves + populate + light)");
 
   // Spawn: first flat 3x3 around the origin (avoids wedge push-out drift).
   auto surface_at = [&](int x, int z) {
@@ -338,6 +249,7 @@ int main(int argc, char** argv) {
   }
   const int ground = surface_at(sx, sz);
   PlayerSP player(&world, "demo", 0);
+  world.add_entity(&player);
   // Drop in from the sky (also demos falling); settles on its own.
   player.set_position_and_rotation(sx + 0.5, ground + 12.0 + 1.62, sz + 0.5, 0.0f, 0.0f);
   ControllerSP controller(world, player);
@@ -368,10 +280,11 @@ int main(int argc, char** argv) {
     }
     const int u_mvp = prog.uniform("u_mvp");
     std::map<std::pair<int, int>, craftpp::render::Tessellator> tess_map;
-    for (const auto& [key, chunk] : world.chunks) {
-      (void)chunk;
-      tess_map[key].upload(mesh_demo_chunk(world, key.first, key.second));
-      world.dirty[key] = false;
+    for (int cx = -1; cx <= 1; ++cx) {
+      for (int cz = -1; cz <= 1; ++cz) {
+        tess_map[{cx, cz}].upload(mesh_demo_chunk(world, cx, cz));
+        world.clear_dirty(cx, cz);
+      }
     }
 
   // Minimal atlas: reuse M2's terrain.png loading path is app-side; the demo
@@ -445,7 +358,7 @@ int main(int argc, char** argv) {
       lmb_was = lmb;
       rmb_was = rmb;
 
-      player.on_update();
+      world.tick();  // world time + registered entities (player)
       controller.update_controller();
       if (++tick_count % 20 == 0) {
         char buf[128];
@@ -476,9 +389,9 @@ int main(int argc, char** argv) {
     prog.use();
     prog.set_mat4(u_mvp, &vp[0][0]);
     for (auto& [key, tess] : tess_map) {
-      if (world.dirty[key]) {
+      if (world.is_dirty(key.first, key.second)) {
         tess.upload(mesh_demo_chunk(world, key.first, key.second));
-        world.dirty[key] = false;
+        world.clear_dirty(key.first, key.second);
       }
       tess.draw();
     }

@@ -122,7 +122,10 @@ nibbles, `relightBlock` with the vanilla local-coords quirk,
 `updateLightByType` BFS, `updateAllLightTypes` on every write, stored-height
 `canBlockSeeTheSky`, lazy precipitation heights, lava `lightValue` for the
 ice/snow cap). Suite 40479/40484 — the 5 failures are accepted oracle gaps
-(see above). Next: live `World`/chunks + 20 TPS loop.
+(see above). **Live world skeleton done** (`LiveWorld`: real
+terrain+carve+populate+light chunks behind `EditWorld`, world time,
+entity registry at 20 TPS; demo migrated to it). Next: TileEntity,
+random ticks, mobs.
 
 ### M6 — Audio + polish
 `SoundManager` on OpenAL-soft (`stb_vorbis`, `dr_wav`), `CodecMus`/`MusInputStream`

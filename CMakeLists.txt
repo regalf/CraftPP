@@ -33,6 +33,7 @@ add_library(craftpp_core
   src_cpp/world/mapgen.cpp
   src_cpp/world/fluid.cpp
   src_cpp/world/worldgen.cpp
+  src_cpp/world/live.cpp
   src_cpp/world/block_collision.cpp
   src_cpp/world/block_place.cpp
   src_cpp/entity/entity.cpp
@@ -80,6 +81,7 @@ add_executable(craftpp_tests
   tests/test_physics.cpp
   tests/test_living.cpp
   tests/test_player.cpp
+  tests/test_live.cpp
   tests/test_frustum.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
