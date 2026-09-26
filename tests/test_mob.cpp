@@ -105,6 +105,21 @@ TEST_CASE("zombie climbs one-high wall", "[mob]") {
   CHECK(crossed);
 }
 
+TEST_CASE("zombie knockback throws away", "[mob]") {
+  auto w = flat_world();
+  entity::PlayerSP player(&w, "t", 0);
+  player.set_position_and_rotation(8.5, 66.62, 8.5, 0.0f, 0.0f);
+  w.add_entity(&player);
+  entity::Zombie z(&w);
+  z.set_position_and_rotation(7.5, 65.0, 8.5, 0.0f, 0.0f);  // west of player
+  w.add_entity(&z);
+  z.attack_time = 0;
+  player.motion_x = player.motion_z = 0.0;
+  z.on_update();  // seeks (in range) and hits
+  CHECK(player.health < 20);
+  CHECK(player.motion_x > 0.0);  // thrown east, away from the zombie
+}
+
 TEST_CASE("creative player takes no damage", "[mob]") {
   auto w = flat_world();
   entity::PlayerSP player(&w, "t", 0);

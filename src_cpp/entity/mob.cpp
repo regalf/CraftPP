@@ -128,7 +128,8 @@ void Zombie::update_entity_action_state() {
     attack_time = 20;
     if (auto* living = dynamic_cast<Living*>(target)) {
       living->attack_ex(DamageSource::kMob, attack_strength, this);
-      living->knock_back(*this, attack_strength, dx, dz);
+      // knockBack takes attacker-minus-victim (victim flies away from us).
+      living->knock_back(*this, attack_strength, pos_x - target->pos_x, pos_z - target->pos_z);
     }
   }
 }
