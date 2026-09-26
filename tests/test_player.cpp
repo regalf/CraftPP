@@ -636,10 +636,14 @@ TEST_CASE("playerSP onLivingUpdate logic (no oracle: needs the client)", "[playe
   sp.capabilities.allow_flying = true;
   k->key_jump = true;
   sp.on_living_update();
-  CHECK(sp.fly_toggle_timer == 7);
+  // Vanilla decrements the just-armed timer in the same tick (7 -> 6).
+  CHECK(sp.fly_toggle_timer == 6);
   CHECK(!sp.capabilities.is_flying);
   k->key_jump = false;
   sp.on_living_update();
+  // Second tap mid-air (on_ground would cancel like vanilla): the toggle
+  // fires and flight sticks.
+  sp.on_ground = false;
   k->key_jump = true;
   sp.on_living_update();
   CHECK(sp.capabilities.is_flying);

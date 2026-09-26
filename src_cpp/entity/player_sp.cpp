@@ -113,10 +113,10 @@ void PlayerSP::on_living_update() {
   if (time_until_portal > 0) --time_until_portal;
 
   const bool was_jump = prev_jump_held;
-  prev_jump_held = movement_input->jump;
   constexpr float kSprintFwd = 0.8f;
   const bool wants_sprint_fwd = movement_input->move_forward >= kSprintFwd;
   movement_input->update_player_move_state();
+  prev_jump_held = movement_input->jump;
   if (is_using_item()) {
     movement_input->move_strafe *= 0.2f;
     movement_input->move_forward *= 0.2f;
