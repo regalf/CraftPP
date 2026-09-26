@@ -72,6 +72,27 @@ TEST_CASE("zombie needs darkness to spawn", "[mob]") {
   CHECK(!open_ok);
 }
 
+TEST_CASE("survival mining drops the block (harvest before removal)", "[mob]") {
+  auto w = flat_world();
+  entity::PlayerSP p(&w, "miner", 0);
+  w.add_entity(&p);
+  p.set_position(8.5, 70.0, 8.5);
+  entity::ControllerSP c(w, p);
+  // Mine the dirt at (8,63,8) through the real controller path.
+  REQUIRE(w.block_id(8, 63, 8) == world::bid::kDirt);
+  c.click_block(8, 63, 8, 1);
+  for (int i = 0; i < 300 && w.block_id(8, 63, 8) != 0; ++i) {
+    c.send_block_removing(8, 63, 8, 1);
+    w.tick();
+  }
+  REQUIRE(w.block_id(8, 63, 8) == 0);
+  bool dirt = false;
+  for (auto& it : w.items()) {
+    if (it->item.item_id == world::bid::kDirt) dirt = true;
+  }
+  CHECK(dirt);
+}
+
 TEST_CASE("pig drops pork on death", "[mob]") {
   auto w = flat_world();
   int pork = 0;

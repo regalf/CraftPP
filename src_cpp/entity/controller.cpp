@@ -116,7 +116,6 @@ void ControllerSP::send_block_removing(int x, int y, int z, int side) {
 bool ControllerSP::send_block_removed(int x, int y, int z, int side) {
   const int id = w.block_id(x, y, z);
   const int meta = w.block_meta(x, y, z);
-  const bool removed = Controller::send_block_removed(x, y, z, side);
   if (auto* held = p.current_equipped()) {
     if (held->has_value()) {
       const bool used = held->value().on_block_destroyed(x, y, z, p);
@@ -124,10 +123,12 @@ bool ControllerSP::send_block_removed(int x, int y, int z, int side) {
       if (held->value().empty()) p.destroy_current_equipped_item();
     }
   }
-  if (removed && p.can_harvest_block(id)) {
+  // Vanilla order: harvest BEFORE the block goes to air (harvest_block
+  // reads the live block for drops).
+  if (id > 0 && p.can_harvest_block(id)) {
     world::edit::harvest_block(w, p, x, y, z, meta);
   }
-  return removed;
+  return Controller::send_block_removed(x, y, z, side);
 }
 
 void ControllerSP::reset_block_removing() {
