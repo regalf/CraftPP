@@ -113,8 +113,8 @@ void add_crack_cube(craftpp::render::Mesh& m, int x, int y, int z, int tile) {
   };
   quad(x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0);  // top
   quad(x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1);  // bottom
-  quad(x1, y1, z0, x0, y1, z0, x0, y0, z0, x1, y0, z0);  // -z
-  quad(x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, y0, z1);  // +z
+  quad(x0, y1, z0, x1, y1, z0, x1, y0, z0, x0, y0, z0);  // -z
+  quad(x0, y1, z1, x0, y0, z1, x1, y0, z1, x1, y1, z1);  // +z
   quad(x0, y1, z1, x0, y1, z0, x0, y0, z0, x0, y0, z1);  // -x
   quad(x1, y1, z0, x1, y1, z1, x1, y0, z1, x1, y0, z0);  // +x
 }
