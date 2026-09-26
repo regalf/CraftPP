@@ -126,10 +126,10 @@ void Zombie::update_entity_action_state() {
   if (attack_time <= 0 && d2 < 4.0 &&
       target->bbox.max_y > bbox.min_y && target->bbox.min_y < bbox.max_y) {
     attack_time = 20;
+    // attack_ex applies damage + knockback itself (all living-vs-living
+    // hits knock back; environmental hits have no attacker and don't).
     if (auto* living = dynamic_cast<Living*>(target)) {
       living->attack_ex(DamageSource::kMob, attack_strength, this);
-      // knockBack takes attacker-minus-victim (victim flies away from us).
-      living->knock_back(*this, attack_strength, pos_x - target->pos_x, pos_z - target->pos_z);
     }
   }
 }
