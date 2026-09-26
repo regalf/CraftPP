@@ -7,10 +7,16 @@ Target: a client that looks, feels and behaves like the original 1.0 client
 with a modern multithreaded engine (main tick / render / chunk-generation threads,
 OpenGL 3.3+, CMake).
 
-Status: M4 done — deterministic core, chunk rendering, Java-identical
-world generation, and bit-identical player physics + survival/creative
-block break/place (differential-tested against the 1.0 engine).
-A throwaway playable demo (`craftpp_demo`) walks real terrain.
+Status: M5 singleplayer slice — everything M4 was (deterministic core,
+chunk rendering, Java-identical world generation, bit-identical player
+physics and block break/place, differential-tested against the 1.0
+engine), plus a live world: synchronous light engine, day/night cycle,
+random block ticks (grass, leaves, ice, fire), furnaces/chests/signs,
+item drops + inventory pickup, pigs + zombies with spawning, the full
+1.0 crafting table, and creative mode. Suite fully green (40625
+assertions, zero gaps).
+A playable demo (`craftpp_demo`) walks, mines, crafts-by-hand and
+survives on real terrain.
 
 ## Legal notice — please read
 
@@ -63,7 +69,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 ```text
 src_cpp/    # new C++20 sources (core, world, render, entity, gui, audio, net, app)
-tests/      # Catch2 parity tests (RNG, NBT, worldgen, physics, player)
+tests/      # Catch2 parity + behavior tests (RNG, NBT, worldgen, physics,
+            # player, live world, ticks, tiles, crafting, mobs)
 docs/       # design notes (overview, core/world/render/testing/known-issues)
 ```
 
@@ -85,7 +92,8 @@ cmake --build build
 ./build/craftpp_tests   # full parity suite (ctest also works)
 ./build/craftpp [--assets DIR]  # M2 chunk renderer (needs your own
                                 # terrain.png under assets/, never committed)
-./build/craftpp_demo [--seed N]  # throwaway M4 demo: WASD/mouse,
+./build/craftpp_demo [--seed N]  # playable survival slice: WASD/mouse,
                                  # Space jump, Shift sneak, LMB mine,
-                                 # RMB place stone, ESC quit
+                                 # RMB place held stack, 1-9 hotbar,
+                                 # G creative/survival, ESC quit
 ```
