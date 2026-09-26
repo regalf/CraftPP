@@ -48,6 +48,7 @@ add_library(craftpp_core
   src_cpp/entity/mob.cpp
   src_cpp/entity/controller.cpp
   src_cpp/render/mesher.cpp
+  src_cpp/render/model.cpp
   src_cpp/render/frustum.cpp
   src_cpp/render/shader.cpp
   src_cpp/render/texture.cpp
@@ -97,6 +98,7 @@ add_executable(craftpp_tests
   tests/test_save.cpp
   tests/test_textures.cpp
   tests/test_mesher_live.cpp
+  tests/test_model.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
 catch_discover_tests(craftpp_tests)

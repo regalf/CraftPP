@@ -7,9 +7,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <csignal>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -27,6 +29,7 @@
 #include "entity/player_sp.hpp"
 #include "render/frustum.hpp"
 #include "render/mesher.hpp"
+#include "render/model.hpp"
 #include "render/shader.hpp"
 #include "render/shaders.hpp"
 #include "render/tessellator.hpp"
@@ -279,11 +282,24 @@ int main(int argc, char** argv) {
 
   int exit_code = 0;
   {
-    craftpp::render::Texture atlas;
-    if (!atlas.upload_nearest(atlas_img)) {
-      craftpp::log_error("atlas upload failed");
-      return 1;
-    }
+  craftpp::render::Texture atlas;
+  if (!atlas.upload_nearest(atlas_img)) {
+    craftpp::log_error("atlas upload failed");
+    return 1;
+  }
+  // Mob skins (local assets; mirroring RenderLiving texture binds).
+  craftpp::render::Texture pig_tex, zombie_tex;
+  {
+    craftpp::render::Image img;
+    auto load_skin = [&](const std::string& name, craftpp::render::Texture& tex) {
+      if (!craftpp::render::load_png((args.assets + name).c_str(), img, err) || img.width != 64 ||
+          img.height != 32 || !tex.upload_nearest(img)) {
+        craftpp::log_error("cannot load skin " + name + ": " + err);
+      }
+    };
+    load_skin("/mob/pig.png", pig_tex);
+    load_skin("/mob/zombie.png", zombie_tex);
+  }
     craftpp::render::ShaderProgram terrain_prog;
     if (!terrain_prog.link(craftpp::render::kTerrainVert, craftpp::render::kTerrainFrag, err)) {
       craftpp::log_error("terrain shader link failed: " + err);
@@ -500,7 +516,43 @@ int main(int argc, char** argv) {
         if (frustum.box_visible(box)) tess.draw();
       }
 
-      // Entities as plain boxes (real models land with the entity renderer).
+      // Mobs as textured code models (pig/zombie skins); drops stay boxes.
+      glDisable(GL_CULL_FACE);  // entity meshes mirror X (winding flips)
+      for (auto& m : world.mobs()) {
+        if (!m || m->is_dead) continue;
+        const bool pig = dynamic_cast<craftpp::entity::Pig*>(m.get()) != nullptr;
+        const float moving = std::abs(m->move_forward) > 0.01F ? 1.0F : 0.0F;
+        craftpp::render::Mesh mm;
+        if (pig) {
+          mm = craftpp::render::entity_mesh(
+              craftpp::render::pig_parts(m->distance_walked, moving, 0.0F, 0.0F), 64, 32,
+              180.0F - m->rotation_yaw, 1.0F);
+          pig_tex.bind(0);
+        } else {
+          mm = craftpp::render::entity_mesh(
+              craftpp::render::zombie_parts(m->distance_walked, moving, 0.0F, m->ticks_existed,
+                                            0.0F, 0.0F),
+              64, 32, 180.0F - m->rotation_yaw, 1.0F);
+          zombie_tex.bind(0);
+        }
+        // Translate to feet (mesh is entity-local).
+        for (auto& v : mm.vertices) {
+          v.x += static_cast<float>(m->pos_x);
+          v.y += static_cast<float>(m->pos_y);
+          v.z += static_cast<float>(m->pos_z);
+        }
+        terrain_prog.use();
+        terrain_prog.set_mat4(t_mvp, &vp[0][0]);
+        terrain_prog.set_mat4(t_view, &view[0][0]);
+        terrain_prog.set_float(t_fog_start, 60.0F);
+        terrain_prog.set_float(t_fog_end, 220.0F);
+        terrain_prog.set_vec3(t_fog_color, 0.74F * daylight, 0.84F * daylight, 1.0F * daylight);
+        terrain_prog.set_int(t_tex, 0);
+        craftpp::render::Tessellator mtess;
+        mtess.upload(mm);
+        mtess.draw();
+      }
+      glEnable(GL_CULL_FACE);
       flat_prog.use();
       flat_prog.set_mat4(f_mvp, &vp[0][0]);
       flat_prog.set_float(f_bright, daylight);
@@ -517,15 +569,6 @@ int main(int argc, char** argv) {
           add_quad(em, x0, y1, z1, x0, y1, z0, x0, y0, z0, x0, y0, z1, r * 0.6f, g * 0.6f, b * 0.6f);
           add_quad(em, x1, y1, z0, x1, y1, z1, x1, y0, z1, x1, y0, z0, r * 0.6f, g * 0.6f, b * 0.6f);
         };
-        for (auto& m : world.mobs()) {
-          if (!m || m->is_dead) continue;
-          const bool pig = dynamic_cast<craftpp::entity::Pig*>(m.get()) != nullptr;
-          if (pig) {
-            box(m->pos_x, m->pos_y, m->pos_z, 0.45, 0.9, 0.95f, 0.6f, 0.65f);
-          } else {
-            box(m->pos_x, m->pos_y, m->pos_z, 0.3, 1.8, 0.25f, 0.45f, 0.25f);
-          }
-        }
         for (auto& it : world.items()) {
           if (!it || it->is_dead) continue;
           box(it->pos_x, it->pos_y, it->pos_z, 0.12, 0.25, 0.95f, 0.85f, 0.3f);
