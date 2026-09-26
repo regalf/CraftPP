@@ -112,7 +112,8 @@ void PlayerSP::on_living_update() {
   }
   if (time_until_portal > 0) --time_until_portal;
 
-  const bool was_jump = movement_input->jump;
+  const bool was_jump = prev_jump_held;
+  prev_jump_held = movement_input->jump;
   constexpr float kSprintFwd = 0.8f;
   const bool wants_sprint_fwd = movement_input->move_forward >= kSprintFwd;
   movement_input->update_player_move_state();
@@ -155,6 +156,9 @@ void PlayerSP::on_living_update() {
     if (movement_input->sneak) motion_y -= 0.15;
     if (movement_input->jump) motion_y += 0.15;
   }
+  // EntityPlayer.onLivingUpdate fly-timer decay (SP skips Player's update
+  // like the source skips to Living's; the decay runs here, after the check).
+  if (fly_toggle_timer > 0) --fly_toggle_timer;
   Living::on_living_update();
   if (on_ground && capabilities.is_flying) capabilities.is_flying = false;
 }

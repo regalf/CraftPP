@@ -1,6 +1,8 @@
 // Live singleplayer world: generation + tick determinism + light on edits.
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include "entity/controller.hpp"
+#include "entity/player_sp.hpp"
 #include "world/live.hpp"
 
 namespace {
@@ -8,6 +10,16 @@ craftpp::world::LiveWorld make_world() {
   craftpp::world::LiveWorld w(1LL);
   w.provide_area(-2, -2, 2, 2);
   return w;
+}
+// Flat stone/dirt/grass pad in chunk (0,0) for controlled actor tests.
+void flatten(craftpp::world::LiveWorld& w) {
+  for (int x = 0; x < 16; ++x)
+    for (int z = 0; z < 16; ++z) {
+      for (int y = 0; y < 60; ++y) w.set_raw(x, y, z, 1, 0);
+      for (int y = 60; y < 64; ++y) w.set_raw(x, y, z, 3, 0);
+      w.set_raw(x, 64, z, 2, 0);
+      for (int y = 65; y < 128; ++y) w.set_raw(x, y, z, 0, 0);
+    }
 }
 }  // namespace
 
@@ -76,8 +88,7 @@ TEST_CASE("live world edits update light", "[live]") {
   CHECK(w.saved_sky(sx, sy, sz) == sky0);
 }
 
-TEST_CASE("live world generation is deterministic", "[live]") {
-  auto hash_world = [](craftpp::world::LiveWorld& w) {
+TEST_CASE("live world generation is deterministic", "[live]") {  auto hash_world = [](craftpp::world::LiveWorld& w) {
     std::uint32_t h = 1;
     for (int cx = -1; cx <= 1; ++cx)
       for (int cz = -1; cz <= 1; ++cz)
@@ -93,4 +104,39 @@ TEST_CASE("live world generation is deterministic", "[live]") {
   auto a = make_world();
   auto b = make_world();
   CHECK(hash_world(a) == hash_world(b));
+}
+
+TEST_CASE("creative double-tap space toggles fly", "[live]") {
+  craftpp::world::LiveWorld w(1LL);
+  w.provide_area(-1, -1, 1, 1);
+  flatten(w);
+  craftpp::entity::PlayerSP p(&w, "t", 0);
+  p.set_position_and_rotation(8.5, 66.62, 8.5, 0.0f, 0.0f);
+  w.add_entity(&p);
+  craftpp::entity::ControllerCreative::enable_creative(p);
+  for (int i = 0; i < 30; ++i) {
+    p.movement_input->jump = false;
+    w.tick();
+  }
+  REQUIRE(p.on_ground);
+  auto tap = [&](int n) {
+    for (int i = 0; i < n; ++i) {
+      p.movement_input->jump = true;
+      w.tick();
+    }
+  };
+  auto rest = [&](int n) {
+    for (int i = 0; i < n; ++i) {
+      p.movement_input->jump = false;
+      w.tick();
+    }
+  };
+  tap(2);
+  CHECK(!p.capabilities.is_flying);  // first tap only arms the timer
+  rest(4);
+  const double y0 = p.pos_y;
+  tap(2);
+  CHECK(p.capabilities.is_flying);  // second tap toggles
+  rest(10);
+  CHECK(p.pos_y > y0);  // holding jump climbs while flying
 }

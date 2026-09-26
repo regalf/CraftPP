@@ -28,6 +28,9 @@ class PlayerSP : public Player {
   float prev_render_arm_pitch = 0.0f;
   int sprint_toggle_timer = 0;
   int sprinting_ticks_left = 0;
+  // Previous-tick jump held state (vanilla reads it before the per-frame
+  // key refresh; our input has no refresh, so track it for edge detect).
+  bool prev_jump_held = false;
   float time_in_portal = 0.0f;
   float prev_time_in_portal = 0.0f;
   bool in_portal = false;
