@@ -48,25 +48,25 @@ bool FeatureGen::cactus_can_stay(int x, int y, int z) const {
 bool FeatureGen::cactus_can_place(int x, int y, int z) const {
   // super.canPlaceBlockAt: target air or ground cover.
   const int target = w_.get_id(x, y, z);
-  if (target != 0 && !bid::is_ground_cover(target)) return false;
+  if (target != 0) return false;  // vanilla gen uses strict isAirBlock
   return cactus_can_stay(x, y, z);
 }
 
 bool FeatureGen::pumpkin_can_place(int x, int y, int z) const {
   const int target = w_.get_id(x, y, z);
-  if (target != 0 && !bid::is_ground_cover(target)) return false;
+  if (target != 0) return false;  // vanilla gen uses strict isAirBlock
   return bid::is_normal_cube(w_.get_id(x, y - 1, z));
 }
 
 bool FeatureGen::lily_can_place(int x, int y, int z) const {
   const int target = w_.get_id(x, y, z);
-  if (target != 0 && !bid::is_ground_cover(target)) return false;
+  if (target != 0) return false;  // vanilla gen uses strict isAirBlock
   return w_.get_id(x, y - 1, z) == bid::kWaterStill;
 }
 
 bool FeatureGen::mushroom_can_place(int x, int y, int z) const {
   const int target = w_.get_id(x, y, z);
-  if (target != 0 && !bid::is_ground_cover(target)) return false;
+  if (target != 0) return false;  // vanilla gen uses strict isAirBlock
   return bid::is_opaque(w_.get_id(x, y - 1, z));
 }
 

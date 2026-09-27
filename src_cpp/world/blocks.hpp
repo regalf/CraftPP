@@ -299,8 +299,14 @@ inline int light_value(int id) {
 // Mirrors Block.slipperiness (default 0.6; ice 0.98). Nothing else overrides.
 inline float block_slipperiness(int id) { return id == kIce ? 0.98f : 0.6f; }
 
-// Ground-cover materials for Block.canPlaceBlockAt (vine + snow cover).
-inline bool is_ground_cover(int id) { return id == kVine || id == kSnowCover; }
+// Material.getIsGroundCover for Block.canPlaceBlockAt: MaterialTransparent
+// (air, fire) + MaterialLiquid (water, lava) set it in the constructor,
+// plus explicit vine + snow cover. Everything else (leaves, glass, plants,
+// circuits, ice, cactus, ...) is NOT ground cover.
+inline bool is_ground_cover(int id) {
+  return id == kVine || id == kSnowCover || id == kWaterMoving || id == kWaterStill ||
+         id == kLavaMoving || id == kLavaStill || id == kFire;
+}
 
 // Mirrors Block.getBlockTextureFromSideAndMetadata (+ the facing-aware
 // getBlockTexture for furnace/dispenser/pumpkin): terrain.png tile index

@@ -173,15 +173,26 @@ TEST_CASE("water placement rules match vanilla 1.0", "[tick]") {
   CHECK(!edit::is_replaceable_by_blocks(bid::kDirt));
   CHECK(!edit::is_replaceable_by_blocks(bid::kTallGrass));
 
-  // Dirt cannot replace water (Block.canPlaceBlockAt target check).
+  // Plain blocks replace water (MaterialLiquid is ground cover).
   {
     auto w = flat_world();
     w.set_raw(8, 64, 8, bid::kWaterStill, 0);
     AimBreaker br;
     int stack = 64;
-    CHECK(!edit::use_block_item(w, w.collider(), br, stack, bid::kDirt, 0, 8, 63, 8, 1));
-    CHECK(w.block_id(8, 64, 8) == bid::kWaterStill);
-    CHECK(stack == 64);
+    CHECK(edit::use_block_item(w, w.collider(), br, stack, bid::kDirt, 0, 8, 63, 8, 1));
+    CHECK(w.block_id(8, 64, 8) == bid::kDirt);
+    CHECK(stack == 63);
+  }
+  // Grass tufts are NOT ground cover: placement offsets above, tuft survives.
+  {
+    auto w = flat_world();
+    w.set_raw(8, 64, 8, bid::kTallGrass, 0);
+    AimBreaker br;
+    int stack = 64;
+    CHECK(edit::use_block_item(w, w.collider(), br, stack, bid::kDirt, 0, 8, 64, 8, 1));
+    CHECK(w.block_id(8, 64, 8) == bid::kTallGrass);
+    CHECK(w.block_id(8, 65, 8) == bid::kDirt);
+    CHECK(stack == 63);
   }
   // Torch/rail/chest use support-only checks: they replace water.
   for (const int item : {bid::kTorch, bid::kRail, bid::kChest}) {
