@@ -1205,7 +1205,7 @@ int main(int argc, char** argv) {
           hs.saturation = player.food.saturation;
           hs.armor = player.inventory.armor_value();
           hs.air = player.air_supply;
-          hs.in_water = player.in_water;
+          hs.in_water = player.is_inside_of_material_water();
           hs.current_item = player.inventory.current;
           hs.xp_frac = player.current_xp;
           hs.xp_level = player.player_level;

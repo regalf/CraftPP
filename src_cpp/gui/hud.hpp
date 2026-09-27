@@ -25,7 +25,7 @@ struct HudState {
   float saturation = 5.0F;
   int armor = 0;
   int air = 300;
-  bool in_water = false;
+  bool in_water = false;  // head submerged (isInsideOfMaterial): air bubbles
   int current_item = 0;
   float xp_frac = 0.0F;
   int xp_level = 0;
