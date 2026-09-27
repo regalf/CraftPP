@@ -1245,13 +1245,16 @@ int main(int argc, char** argv) {
           draw_2d(hud.items, items_tex);
           atlas.bind(0);
           if (!hud.blocks.vertices.empty()) {
-            // Isometric item cubes need depth (faces overlap in 2D).
+            // Isometric item cubes need depth (faces overlap in 2D). The
+            // inventory mirror flips winding, so culling stays off here.
             glClear(GL_DEPTH_BUFFER_BIT);
             glEnable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE);
             craftpp::render::Tessellator tess;
             tess.upload(hud.blocks);
             tess.draw();
             glDisable(GL_DEPTH_TEST);
+            glEnable(GL_CULL_FACE);
           }
           draw_2d(hud.shadow, font_tex);
           draw_2d(hud.text, font_tex);
