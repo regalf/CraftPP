@@ -93,4 +93,38 @@ TEST_CASE("mesh_live renders plants as cross quads", "[mesher]") {
   CHECK(found);
 }
 
+TEST_CASE("cross quads are double-sided with upright UVs", "[mesher]") {
+  craftpp::render::Mesher m;
+  auto w = flat_world();
+  w.set_id(4, 65, 4, 37);
+  const auto mesh = m.mesh_live(w, 0, 0);
+  // Isolate flower verts (tile 13 u-range).
+  std::vector<craftpp::render::Vertex> fv;
+  for (const auto& v : mesh.vertices) {
+    if (v.u > 0.81F && v.u < 0.88F) fv.push_back(v);
+  }
+  // 4 quads (2 diagonals x 2 windings) x 4 verts.
+  CHECK(fv.size() == 16);
+  // Top verts (y=66) carry v0 (texture top), bottom verts (y=65) v1.
+  for (const auto& v : fv) {
+    if (v.y == 66.0F) CHECK(v.v < 0.06F);
+    if (v.y == 65.0F) CHECK(v.v > 0.06F);
+  }
+  // Both windings of the diagonals exist (face normals point both ways).
+  bool pos = false, neg = false;
+  for (std::size_t i = 0; i + 2 < mesh.indices.size(); i += 3) {
+    const auto& a = mesh.vertices[mesh.indices[i]];
+    if (a.u < 0.81F || a.u > 0.88F) continue;
+    const auto& b = mesh.vertices[mesh.indices[i + 1]];
+    const auto& c = mesh.vertices[mesh.indices[i + 2]];
+    const float nx = (b.y - a.y) * (c.z - a.z) - (b.z - a.z) * (c.y - a.y);
+    const float nz = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    const float s = nx + nz;
+    if (s > 0) pos = true;
+    if (s < 0) neg = true;
+  }
+  CHECK(pos);
+  CHECK(neg);
+}
+
 }  // namespace

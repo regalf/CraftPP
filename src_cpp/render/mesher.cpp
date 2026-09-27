@@ -133,6 +133,18 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
     }
     mesh.indices.insert(mesh.indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
   };
+  // Quad with explicit UVs per corner (for cross-quads below).
+  auto emit_quad_uv = [&](float x0, float y0, float z0, float u0, float v0, float x1, float y1,
+                          float z1, float u1, float v1, float x2, float y2, float z2, float u2,
+                          float v2, float x3, float y3, float z3, float u3, float v3, float r,
+                          float g, float b) {
+    const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
+    mesh.vertices.push_back(Vertex{x0, y0, z0, r, g, b, u0, v0});
+    mesh.vertices.push_back(Vertex{x1, y1, z1, r, g, b, u1, v1});
+    mesh.vertices.push_back(Vertex{x2, y2, z2, r, g, b, u2, v2});
+    mesh.vertices.push_back(Vertex{x3, y3, z3, r, g, b, u3, v3});
+    mesh.indices.insert(mesh.indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+  };
   auto emit_face = [&](int x, int y, int z, const FaceDesc& f, float r, float g, float b, int tile) {
     float u0, u1, v0, v1;
     tile_uv(tile, u0, u1, v0, v1);
@@ -161,18 +173,23 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
         const int rt = world::bid::render_type(id);
         const bool water = (id == 8 || id == 9);
         if (rt == 1 || rt == 2 || rt == 3) {
-          // Cross quads (plants, torch, fire): two diagonals, full texture.
+          // renderCrossedSquares: two diagonals x two windings (visible
+          // from every side under any culling), inset +-0.45, exact UVs.
           const int tile = world::bid::block_texture(id, 2, meta);
           float u0, u1, v0, v1;
           tile_uv(tile, u0, u1, v0, v1);
           const float b = brightness(x, y, z);
-          const float us[4] = {0, 0, 1, 1};
-          const float vs[4] = {0, 1, 1, 0};
-          const float o = 0.15F;
-          emit_quad(x + o, y, z + o, x + o, y + 1, z + o, x + 1 - o, y + 1, z + 1 - o, x + 1 - o, y,
-                    z + 1 - o, b, b, b, u0, u1, v0, v1, us, vs);
-          emit_quad(x + 1 - o, y, z + o, x + 1 - o, y + 1, z + o, x + o, y + 1, z + 1 - o, x + o, y,
-                    z + 1 - o, b, b, b, u0, u1, v0, v1, us, vs);
+          const float xa = x + 0.05F, xb = x + 0.95F;
+          const float za = z + 0.05F, zb = z + 0.95F;
+          const float y0 = y, y1 = y + 1;
+          emit_quad_uv(xa, y1, za, u0, v0, xa, y0, za, u0, v1, xb, y0, zb, u1, v1, xb, y1, zb,
+                       u1, v0, b, b, b);
+          emit_quad_uv(xb, y1, zb, u0, v0, xb, y0, zb, u0, v1, xa, y0, za, u1, v1, xa, y1, za,
+                       u1, v0, b, b, b);
+          emit_quad_uv(xa, y1, zb, u0, v0, xa, y0, zb, u0, v1, xb, y0, za, u1, v1, xb, y1, za,
+                       u1, v0, b, b, b);
+          emit_quad_uv(xb, y1, za, u0, v0, xb, y0, za, u0, v1, xa, y0, zb, u1, v1, xa, y1, zb,
+                       u1, v0, b, b, b);
           continue;
         }
         const bool leaves = (id == 18);
