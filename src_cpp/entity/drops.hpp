@@ -16,6 +16,10 @@ class DroppedItem : public Entity {
   int age = 0;
   int pickup_delay = 0;
   int health = 5;
+  // Hover/spin phase (EntityItem.field_804_d): random per drop, visual
+  // only. Live drops draw from world rand (already perturbed by scatter);
+  // loaded drops get 0 (the source re-randomizes on load, also visual).
+  float hover_phase = 0.0f;
 
   DroppedItem(EntityWorld* w, double x, double y, double z, const ItemStack& stack)
       : Entity(w), item(stack) {
@@ -28,6 +32,8 @@ class DroppedItem : public Entity {
     motion_x = (world->world_rand().next_float() - 0.5) * 0.2;
     motion_y = 0.2;
     motion_z = (world->world_rand().next_float() - 0.5) * 0.2;
+    hover_phase =
+        world->world_rand().next_float() * 2.0f * 3.14159265f;  // visual only
   }
 
   // Load path: explicit motion, no RNG draws (loading must not perturb the

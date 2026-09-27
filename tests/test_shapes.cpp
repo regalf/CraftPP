@@ -2,10 +2,13 @@
 // Collision boxes mirror BlockStep/BlockSnow/BlockLadder sources; selection
 // mirrors getSelectedBoundingBoxFromPool; mesh_live geometry mirrors
 // renderStandardBlock-with-bounds / renderBlockLadder / renderBlockVine.
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <cmath>
 #include <vector>
 
+#include "render/drop.hpp"
 #include "render/mesher.hpp"
 #include "render/texture_fx.hpp"
 #include "world/block_collision.hpp"
@@ -193,6 +196,41 @@ TEST_CASE("fluid TextureFX tiles animate with vanilla colors", "[shapes]") {
   craftpp::render::FluidTextureFx wflow(Kind::WaterFlow), lflow(Kind::LavaFlow);
   CHECK(wflow.tile() == 206);
   CHECK(lflow.tile() == 238);
+}
+
+TEST_CASE("drop builder emits textured spinning drops", "[shapes]") {
+  using craftpp::render::DropMeshes;
+  // Dirt block drop: mini-cube, 24 verts, atlas UVs in the dirt tile (2).
+  {
+    DropMeshes dm;
+    craftpp::render::build_drop(dm, 3, 0, 1, 8.5F, 65.0F, 8.5F, 10.0F, 0.0F, 45.0F, 1.0F);
+    CHECK(dm.atlas.vertices.size() == 24);
+    CHECK(dm.atlas.indices.size() == 36);
+    CHECK(dm.items.vertices.empty());
+    for (const auto& v : dm.atlas.vertices) {
+      CHECK(v.u >= 2.0F / 16.0F);
+      CHECK(v.u <= 3.0F / 16.0F);
+    }
+    // Bob: center y = 65 + sin(1)*0.1 + 0.1.
+    float yc = 0;
+    for (const auto& v : dm.atlas.vertices) yc += v.y;
+    yc /= 24.0F;
+    CHECK(yc == Catch::Approx(65.0F + std::sin(1.0F) * 0.1F + 0.1F).margin(0.01));
+  }
+  // Stack of 25: 4 layers.
+  {
+    DropMeshes dm;
+    craftpp::render::build_drop(dm, 3, 0, 25, 8.5F, 65.0F, 8.5F, 10.0F, 0.0F, 45.0F, 1.0F);
+    CHECK(dm.atlas.vertices.size() == 96);
+  }
+  // Stick (item 280): billboard sprite in items mesh, 4 verts.
+  {
+    DropMeshes dm;
+    craftpp::render::build_drop(dm, 280, 0, 1, 8.5F, 65.0F, 8.5F, 10.0F, 0.0F, 45.0F, 1.0F);
+    CHECK(dm.atlas.vertices.empty());
+    CHECK(dm.items.vertices.size() == 4);
+    CHECK(dm.items.indices.size() == 6);
+  }
 }
 
 }  // namespace

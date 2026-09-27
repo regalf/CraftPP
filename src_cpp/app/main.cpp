@@ -38,6 +38,7 @@
 #include "gui/hud.hpp"
 #include "gui/lang.hpp"
 #include "gui/screens.hpp"
+#include "render/drop.hpp"
 #include "render/texture_fx.hpp"
 #include "render/frustum.hpp"
 #include "render/mesher.hpp"
@@ -116,18 +117,6 @@ bool pick_block(LiveWorld& w, double ex, double ey, double ez, double dx, double
     cz = static_cast<int>(std::floor(ez));
   }
   return false;
-}
-
-// Flat-shaded box helper for drops (winding CCW front; culling stays off).
-void add_quad(craftpp::render::Mesh& m, float x0, float y0, float z0, float x1, float y1, float z1,
-              float x2, float y2, float z2, float x3, float y3, float z3, float r, float g,
-              float b) {
-  std::uint32_t base = static_cast<std::uint32_t>(m.vertices.size());
-  m.vertices.push_back({x0, y0, z0, r, g, b});
-  m.vertices.push_back({x1, y1, z1, r, g, b});
-  m.vertices.push_back({x2, y2, z2, r, g, b});
-  m.vertices.push_back({x3, y3, z3, r, g, b});
-  m.indices.insert(m.indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
 }
 
 // Crack overlay cube (destroy stages 240-249): slightly expanded to win
@@ -1266,6 +1255,47 @@ int main(int argc, char** argv) {
         }
         glEnable(GL_CULL_FACE);
 
+        // Textured drops (RenderItem.doRenderItem): atlas mini-cubes and
+        // icon billboards with bob/spin, drawn before the fluid pass.
+        {
+          craftpp::render::DropMeshes dm;
+          for (auto& it : world.items()) {
+            if (!it || it->is_dead) continue;
+            const float ix = static_cast<float>(lerp_pos(it->prev_pos_x, it->pos_x, alpha));
+            const float iy = static_cast<float>(lerp_pos(it->prev_pos_y, it->pos_y, alpha));
+            const float iz = static_cast<float>(lerp_pos(it->prev_pos_z, it->pos_z, alpha));
+            float b = static_cast<float>(world.region().full_light(
+                          static_cast<int>(std::floor(ix)), static_cast<int>(std::floor(iy)),
+                          static_cast<int>(std::floor(iz)))) /
+                      15.0F;
+            if (b < 0.0F) b = 0.0F;
+            if (b > 1.0F) b = 1.0F;
+            craftpp::render::build_drop(dm, it->item.item_id, it->item.damage,
+                                        it->item.stack_size, ix, iy, iz,
+                                        static_cast<float>(it->age) + static_cast<float>(alpha),
+                                        it->hover_phase, game->yaw, b);
+          }
+          terrain_prog.use();
+          terrain_prog.set_mat4(t_mvp, &vp[0][0]);
+          terrain_prog.set_mat4(t_view, &view[0][0]);
+          terrain_prog.set_float(t_fog_start, fog_start);
+          terrain_prog.set_float(t_fog_end, fog_end);
+          terrain_prog.set_vec3(t_fog_color, fog_r, fog_g, fog_b);
+          terrain_prog.set_int(t_tex, 0);
+          if (!dm.atlas.vertices.empty()) {
+            atlas.bind(0);
+            craftpp::render::Tessellator dtess;
+            dtess.upload(dm.atlas);
+            dtess.draw();
+          }
+          if (!dm.items.vertices.empty()) {
+            items_tex.bind(0);
+            craftpp::render::Tessellator dtess;
+            dtess.upload(dm.items);
+            dtess.draw();
+          }
+        }
+
         // Transparent pass (renderPass 1): all fluids after all opaque,
         // so lakebeds show through the blended surface.
         atlas.bind(0);
@@ -1277,36 +1307,6 @@ int main(int argc, char** argv) {
         flat_prog.use();
         flat_prog.set_mat4(f_mvp, &vp[0][0]);
         flat_prog.set_float(f_bright, daylight);
-        {
-          craftpp::render::Mesh em;
-          auto box = [&](double ccx, double ccy, double ccz, double hw, double hh, float r,
-                         float g, float b) {
-            const float x0 = ccx - hw, x1 = ccx + hw, y0 = ccy, y1 = ccy + hh, z0 = ccz - hw,
-                        z1 = ccz + hw;
-            add_quad(em, x0, y1, z1, x1, y1, z1, x1, y1, z0, x0, y1, z0, r, g, b);
-            add_quad(em, x0, y0, z0, x1, y0, z0, x1, y0, z1, x0, y0, z1, r * 0.5f, g * 0.5f,
-                     b * 0.5f);
-            add_quad(em, x1, y1, z0, x0, y1, z0, x0, y0, z0, x1, y0, z0, r * 0.8f, g * 0.8f,
-                     b * 0.8f);
-            add_quad(em, x0, y1, z1, x1, y1, z1, x1, y0, z1, x0, y0, z1, r * 0.8f, g * 0.8f,
-                     b * 0.8f);
-            add_quad(em, x0, y1, z1, x0, y1, z0, x0, y0, z0, x0, y0, z1, r * 0.6f, g * 0.6f,
-                     b * 0.6f);
-            add_quad(em, x1, y1, z0, x1, y1, z1, x1, y0, z1, x1, y0, z0, r * 0.6f, g * 0.6f,
-                     b * 0.6f);
-          };
-          for (auto& it : world.items()) {
-            if (!it || it->is_dead) continue;
-            box(lerp_pos(it->prev_pos_x, it->pos_x, alpha),
-                lerp_pos(it->prev_pos_y, it->pos_y, alpha),
-                lerp_pos(it->prev_pos_z, it->pos_z, alpha), 0.12, 0.25, 0.95f, 0.85f, 0.3f);
-          }
-          if (!em.vertices.empty()) {
-            craftpp::render::Tessellator etess;
-            etess.upload(em);
-            etess.draw();
-          }
-        }
 
         // HUD (hidden under menus).
         if (ui.cur == craftpp::gui::Screen::None) {
