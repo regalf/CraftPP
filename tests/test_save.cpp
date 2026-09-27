@@ -234,6 +234,9 @@ TEST_CASE("entities, tiles, tileticks and player survive save/load", "[save]") {
   // Round-trip identity (pos_y raw); the tag itself stores feet (vanilla
   // Pos convention: raw - y_offset).
   CHECK(p2.pos_y == Catch::Approx(70.0));
+  // Physics box synced (stale bbox used to drop loaded players in the void).
+  CHECK(p2.bbox.min_y == Catch::Approx(70.0 - 1.62).margin(0.01));
+  CHECK(lz->bbox.min_y == Catch::Approx(68.0).margin(0.01));
   CHECK(info->player->compound->find("Pos")->list->items[1].f64 ==
         Catch::Approx(70.0 - 1.62));
   CHECK(p2.rotation_yaw == Catch::Approx(45.0f));

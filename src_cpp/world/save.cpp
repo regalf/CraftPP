@@ -203,6 +203,10 @@ void read_entity_base(const nbt::TagCompound& c, entity::Entity& e, double& feet
   if (std::abs(e.motion_x) > 10.0) e.motion_x = 0.0;
   if (std::abs(e.motion_y) > 10.0) e.motion_y = 0.0;
   if (std::abs(e.motion_z) > 10.0) e.motion_z = 0.0;
+  // Sync the bbox like readFromNBT does via setPosition (otherwise physics
+  // runs on a stale box and loaded entities fall through the world).
+  e.set_position(e.pos_x, e.pos_y, e.pos_z);
+  e.set_rotation(e.rotation_yaw, e.rotation_pitch);
 }
 
 }  // namespace
@@ -538,6 +542,7 @@ void apply_player_tag(entity::Player& p, const nbt::Tag& tag) {
     read_entity_base(c, p, feet);
     p.pos_y = feet + p.y_offset;  // feet + 1.62 convention
     p.prev_pos_y = p.last_tick_pos_y = p.pos_y;
+    p.set_position(p.pos_x, p.pos_y, p.pos_z);  // re-sync bbox for physics
     p.health = need(c, "Health").i16;
     p.hurt_time = need(c, "HurtTime").i16;
     p.death_time = need(c, "DeathTime").i16;
