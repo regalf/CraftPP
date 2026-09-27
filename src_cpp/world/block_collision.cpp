@@ -46,6 +46,7 @@ using bid::kSignWall;
 using bid::kSnowCover;
 using bid::kSoulSand;
 using bid::kStairsBrick;
+using bid::kStepSingle;
 using bid::kStairsCobble;
 using bid::kStairsNether;
 using bid::kStairsStoneBrick;
@@ -269,6 +270,10 @@ std::optional<Aabb> BlockCollider::collision_box(int id, int meta, int x, int y,
       const double t = 2.0 / 16.0;
       return Aabb(xd, yd, zd, xd + 1.0, yd + 1.0 - t, zd + 1.0);
     }
+    case kStepSingle:
+      // BlockStep ctor bounds (single=false): bottom half, all metas
+      // (no upside-down slabs in 1.0). Double falls through to full cube.
+      return Aabb(xd, yd, zd, xd + 1.0, yd + 0.5, zd + 1.0);
     case kSnowCover: {
       if ((meta & 7) < 3) return std::nullopt;
       return Aabb(xd, yd, zd, xd + 1.0, yd + 0.5, zd + 1.0);
@@ -443,6 +448,55 @@ void BlockCollider::colliding_boxes(int id, int meta, int x, int y, int z, const
   if (auto b = collision_box(id, meta, x, y, z, w)) {
     if (entity_box.intersects(*b)) out.push_back(*b);
   }
+}
+
+void BlockCollider::selection_boxes(int id, int meta, int x, int y, int z, const BlockView& w,
+                                    std::vector<Aabb>& out) {
+  if (id == 0 || is_fluid(id)) return;  // BlockFluid.canCollideCheck: not pickable
+  const double xd = x, yd = y, zd = z;
+  switch (id) {
+    case kLadder:
+    case kLilyPad:
+      // Thin boxes identical to collision (ladder: per-meta selection
+      // bounds; lilypad: ctor bounds — both vanilla behaviour).
+      if (auto b = collision_box(id, meta, x, y, z, w)) out.push_back(*b);
+      return;
+    case kStepSingle:
+      out.emplace_back(xd, yd, zd, xd + 1.0, yd + 0.5, zd + 1.0);
+      return;
+    case kSnowCover: {
+      const double h = (2.0 * (1 + (meta & 7))) / 16.0;
+      out.emplace_back(xd, yd, zd, xd + 1.0, yd + h, zd + 1.0);
+      return;
+    }
+    case kStairsWood:
+    case kStairsCobble:
+    case kStairsBrick:
+    case kStairsStoneBrick:
+    case kStairsNether: {
+      // Both step boxes (stable where the source reads sticky leftovers).
+      if (meta == 0) {
+        out.emplace_back(xd, yd, zd, xd + 0.5, yd + 0.5, zd + 1);
+        out.emplace_back(xd + 0.5, yd, zd, xd + 1.0, yd + 1.0, zd + 1);
+      } else if (meta == 1) {
+        out.emplace_back(xd, yd, zd, xd + 0.5, yd + 1.0, zd + 1);
+        out.emplace_back(xd + 0.5, yd, zd, xd + 1.0, yd + 0.5, zd + 1);
+      } else if (meta == 2) {
+        out.emplace_back(xd, yd, zd, xd + 1.0, yd + 0.5, zd + 0.5);
+        out.emplace_back(xd, yd, zd + 0.5, xd + 1.0, yd + 1.0, zd + 1);
+      } else if (meta == 3) {
+        out.emplace_back(xd, yd, zd, xd + 1.0, yd + 1.0, zd + 0.5);
+        out.emplace_back(xd, yd, zd + 0.5, xd + 1.0, yd + 0.5, zd + 1);
+      } else {
+        out.emplace_back(xd, yd, zd, xd + 1.0, yd + 1.0, zd + 1);
+      }
+      return;
+    }
+    default:
+      break;
+  }
+  // Vine and everything else: vanilla full-cube selection.
+  out.emplace_back(xd, yd, zd, xd + 1.0, yd + 1.0, zd + 1.0);
 }
 
 }  // namespace craftpp::world

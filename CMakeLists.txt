@@ -105,6 +105,7 @@ add_executable(craftpp_tests
   tests/test_save.cpp
   tests/test_textures.cpp
   tests/test_mesher_live.cpp
+  tests/test_shapes.cpp
   tests/test_model.cpp
   tests/test_font.cpp
   tests/test_hud.cpp

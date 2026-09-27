@@ -44,6 +44,16 @@ class BlockCollider {
   void colliding_boxes(int id, int meta, int x, int y, int z, const Aabb& entity_box,
                        const BlockView& w, std::vector<Aabb>& out);
 
+  // Selection (ray-pick) boxes mirroring getSelectedBoundingBoxFromPool.
+  // Pure and deterministic (no sticky state): ladder/lily reuse their thin
+  // collision boxes, vine keeps the vanilla full cube, slabs/snow use their
+  // state heights, stairs test both step boxes (the source would read
+  // whatever sticky bounds a previous getColliding call left behind —
+  // equivalent image, stable UX). Empty = not pickable (fluids, like
+  // BlockFluid.canCollideCheck).
+  void selection_boxes(int id, int meta, int x, int y, int z, const BlockView& w,
+                       std::vector<Aabb>& out);
+
  private:
   // Local (0..1-ish) sticky bounds per block id.
   Aabb sticky_[256];

@@ -201,6 +201,113 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
                        u1, v0, tr, tg, tb);
           continue;
         }
+        if (id == world::bid::kStepSingle || id == world::bid::kSnowCover) {
+          // renderStandardBlock with state bounds: clipped box, full-tile
+          // UVs squeezed onto each face, vanilla face shading. Culling is
+          // the generic non-occluder rule (slab sides additionally hide
+          // against the same slab, like BlockStep.shouldSideBeRendered;
+          // the always-emit top/bottom of the source are depth-hidden
+          // anyway, so skipping them against opaque cubes is identical).
+          const double h = id == world::bid::kStepSingle ? 0.5 : (2.0 * (1 + (meta & 7))) / 16.0;
+          for (const FaceDesc& f : kFaces) {
+            const int nx = x + f.nx, ny = y + f.ny, nz = z + f.nz;
+            const int nid = (ny < 0 || ny >= world::RegionWorld::kHeight)
+                                ? 0
+                                : world.get_id(nx, ny, nz);
+            if (!(nid == 0 || (!world::bid::is_opaque(nid) && nid != id))) continue;
+            const int side = (f.face == Face::Bottom) ? 0
+                             : (f.face == Face::Top)  ? 1
+                             : (f.face == Face::ZMin) ? 2
+                             : (f.face == Face::ZMax) ? 3
+                             : (f.face == Face::XMin) ? 4
+                                                      : 5;
+            const int tile = world::bid::block_texture(id, side, meta);
+            float u0, u1, v0, v1;
+            tile_uv(tile, u0, u1, v0, v1);
+            const float b = brightness(nx, ny, nz) * f.shade;
+            const float us[4] = {f.corners[0].u, f.corners[1].u, f.corners[2].u, f.corners[3].u};
+            const float vs[4] = {f.corners[0].v, f.corners[1].v, f.corners[2].v, f.corners[3].v};
+            emit_quad(
+                x + f.corners[0].dx, static_cast<float>(y + f.corners[0].dy * h),
+                z + f.corners[0].dz, x + f.corners[1].dx,
+                static_cast<float>(y + f.corners[1].dy * h), z + f.corners[1].dz,
+                x + f.corners[2].dx, static_cast<float>(y + f.corners[2].dy * h),
+                z + f.corners[2].dz, x + f.corners[3].dx,
+                static_cast<float>(y + f.corners[3].dy * h), z + f.corners[3].dz, b, b, b, u0, u1,
+                v0, v1, us, vs);
+          }
+          continue;
+        }
+        if (id == world::bid::kLadder) {
+          // Verbatim RenderBlocks.renderBlockLadder: one wall quad per
+          // meta (single winding — invisible from behind, like vanilla),
+          // full brightness, no face shading.
+          const int tile = world::bid::block_texture(id, 0, meta);
+          float u0, u1, v0, v1;
+          tile_uv(tile, u0, u1, v0, v1);
+          const float b = brightness(x, y, z);
+          const float t = 0.05F, xf = static_cast<float>(x), yf = static_cast<float>(y),
+                      zf = static_cast<float>(z);
+          if (meta == 5) {
+            emit_quad_uv(xf + t, yf + 1, zf + 1, u0, v0, xf + t, yf, zf + 1, u0, v1, xf + t, yf,
+                         zf, u1, v1, xf + t, yf + 1, zf, u1, v0, b, b, b);
+          } else if (meta == 4) {
+            emit_quad_uv(xf + 1 - t, yf, zf + 1, u1, v1, xf + 1 - t, yf + 1, zf + 1, u1, v0,
+                         xf + 1 - t, yf + 1, zf, u0, v0, xf + 1 - t, yf, zf, u0, v1, b, b, b);
+          } else if (meta == 3) {
+            emit_quad_uv(xf + 1, yf, zf + t, u1, v1, xf + 1, yf + 1, zf + t, u1, v0, xf, yf + 1,
+                         zf + t, u0, v0, xf, yf, zf + t, u0, v1, b, b, b);
+          } else if (meta == 2) {
+            emit_quad_uv(xf + 1, yf + 1, zf + 1 - t, u0, v0, xf + 1, yf, zf + 1 - t, u0, v1, xf,
+                         yf, zf + 1 - t, u1, v1, xf, yf + 1, zf + 1 - t, u1, v0, b, b, b);
+          }
+          continue;
+        }
+        if (id == world::bid::kVine) {
+          // Verbatim RenderBlocks.renderBlockVine: one double-wound face
+          // per set meta bit + top face under a normal cube, foliage tint.
+          const int tile = world::bid::block_texture(id, 0, meta);
+          float u0, u1, v0, v1;
+          tile_uv(tile, u0, u1, v0, v1);
+          const float b = brightness(x, y, z);
+          float tr = 1, tg = 1, tb = 1;
+          tint(x, z, true, tr, tg, tb);
+          const float r = b * tr, g = b * tg, bl = b * tb;
+          const float t = 0.05F, xf = static_cast<float>(x), yf = static_cast<float>(y),
+                      zf = static_cast<float>(z);
+          if ((meta & 2) != 0) {
+            emit_quad_uv(xf + t, yf + 1, zf + 1, u0, v0, xf + t, yf, zf + 1, u0, v1, xf + t, yf,
+                         zf, u1, v1, xf + t, yf + 1, zf, u1, v0, r, g, bl);
+            emit_quad_uv(xf + t, yf + 1, zf, u1, v0, xf + t, yf, zf, u1, v1, xf + t, yf, zf + 1,
+                         u0, v1, xf + t, yf + 1, zf + 1, u0, v0, r, g, bl);
+          }
+          if ((meta & 8) != 0) {
+            emit_quad_uv(xf + 1 - t, yf, zf + 1, u1, v1, xf + 1 - t, yf + 1, zf + 1, u1, v0,
+                         xf + 1 - t, yf + 1, zf, u0, v0, xf + 1 - t, yf, zf, u0, v1, r, g, bl);
+            emit_quad_uv(xf + 1 - t, yf, zf, u0, v1, xf + 1 - t, yf + 1, zf, u0, v0,
+                         xf + 1 - t, yf + 1, zf + 1, u1, v0, xf + 1 - t, yf, zf + 1, u1, v1, r, g,
+                         bl);
+          }
+          if ((meta & 4) != 0) {
+            emit_quad_uv(xf + 1, yf, zf + t, u1, v1, xf + 1, yf + 1, zf + t, u1, v0, xf, yf + 1,
+                         zf + t, u0, v0, xf, yf, zf + t, u0, v1, r, g, bl);
+            emit_quad_uv(xf, yf, zf + t, u0, v1, xf, yf + 1, zf + t, u0, v0, xf + 1, yf + 1,
+                         zf + t, u1, v0, xf + 1, yf, zf + t, u1, v1, r, g, bl);
+          }
+          if ((meta & 1) != 0) {
+            emit_quad_uv(xf + 1, yf + 1, zf + 1 - t, u0, v0, xf + 1, yf, zf + 1 - t, u0, v1, xf,
+                         yf, zf + 1 - t, u1, v1, xf, yf + 1, zf + 1 - t, u1, v0, r, g, bl);
+            emit_quad_uv(xf, yf + 1, zf + 1 - t, u1, v0, xf, yf, zf + 1 - t, u1, v1, xf + 1, yf,
+                         zf + 1 - t, u0, v1, xf + 1, yf + 1, zf + 1 - t, u0, v0, r, g, bl);
+          }
+          const int above =
+              (y + 1 >= world::RegionWorld::kHeight) ? 0 : world.get_id(x, y + 1, z);
+          if (above != 0 && world::bid::is_opaque(above) && world::bid::renders_as_normal(above)) {
+            emit_quad_uv(xf + 1, yf + 1 - t, zf, u0, v0, xf + 1, yf + 1 - t, zf + 1, u0, v1, xf,
+                         yf + 1 - t, zf + 1, u1, v1, xf, yf + 1 - t, zf, u1, v0, r, g, bl);
+          }
+          continue;
+        }
         const bool leaves = (id == 18);
         const bool occluding = world::bid::is_opaque(id) && !leaves && !water;
         for (const FaceDesc& f : kFaces) {

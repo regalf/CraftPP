@@ -60,30 +60,47 @@ using craftpp::entity::PlayerSP;
 using craftpp::world::BlockCollider;
 using craftpp::world::LiveWorld;
 
-// Full-cube voxel pick (most terrain here is full cubes; shapes are M5).
+// Voxel pick against selection boxes (getSelectedBoundingBoxFromPool):
+// ladder/lilypad thin, slabs/snow state heights, stairs both steps, vine
+// full cube (vanilla). Fluids are not pickable (canCollideCheck). Side ids
+// match the AABB clip convention already used downstream (0/1 y, 2/3 z,
+// 4/5 x).
 bool pick_block(LiveWorld& w, double ex, double ey, double ez, double dx, double dy, double dz,
                 double reach, int& hx, int& hy, int& hz, int& side) {
   int cx = static_cast<int>(std::floor(ex));
   int cy = static_cast<int>(std::floor(ey));
   int cz = static_cast<int>(std::floor(ez));
+  const craftpp::Vec3 from(ex, ey, ez);
+  const craftpp::Vec3 to(ex + dx * reach, ey + dy * reach, ez + dz * reach);
   const double step = 0.05;
   double traveled = 0.0;
   int px = cx, py = cy, pz = cz;
+  BlockCollider collider;
+  std::vector<craftpp::Aabb> boxes;
   while (traveled <= reach) {
     if (!(px == cx && py == cy && pz == cz)) {
       const int id = w.block_id(cx, cy, cz);
       if (id != 0) {
-        hx = cx;
-        hy = cy;
-        hz = cz;
-        if (px != cx) {
-          side = (px < cx) ? 4 : 5;
-        } else if (py != cy) {
-          side = (py < cy) ? 0 : 1;
-        } else {
-          side = (pz < cz) ? 2 : 3;
+        boxes.clear();
+        collider.selection_boxes(id, w.block_meta(cx, cy, cz), cx, cy, cz, w, boxes);
+        double best_d2 = -1.0;
+        int best_face = 0;
+        for (const auto& b : boxes) {
+          if (auto hit = b.clip(from, to)) {
+            const double d2 = from.square_distance_to(hit->hit);
+            if (best_d2 < 0.0 || d2 < best_d2) {
+              best_d2 = d2;
+              best_face = hit->face;
+            }
+          }
         }
-        return true;
+        if (best_d2 >= 0.0) {
+          hx = cx;
+          hy = cy;
+          hz = cz;
+          side = best_face;
+          return true;
+        }
       }
       px = cx;
       py = cy;
