@@ -10,15 +10,20 @@ Tessellator::Tessellator() {
   glGenBuffers(1, &ebo_);
   glBindVertexArray(vao_);
   glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-  // Layout: pos(3) color(4) uv(2), locations 0/1/2 like the terrain shader.
+  // Layout: pos(3) color(3) uv(2) alpha(1), locations 0/1/2/3.
+  // NOTE: alpha needs its own attribute: a vec4 color at offset r would
+  // read (r,g,b,u), not (r,g,b,a).
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(0));
   glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                         reinterpret_cast<void*>(offsetof(Vertex, r)));
   glEnableVertexAttribArray(2);
   glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
                         reinterpret_cast<void*>(offsetof(Vertex, u)));
+  glEnableVertexAttribArray(3);
+  glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                        reinterpret_cast<void*>(offsetof(Vertex, a)));
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo_);
   glBindVertexArray(0);
 }

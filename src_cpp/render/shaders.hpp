@@ -8,8 +8,9 @@ namespace craftpp::render {
 inline constexpr const char* kTerrainVert = R"GLSL(
 #version 330 core
 layout(location = 0) in vec3 in_pos;
-layout(location = 1) in vec4 in_color;
+layout(location = 1) in vec3 in_color;
 layout(location = 2) in vec2 in_uv;
+layout(location = 3) in float in_alpha;
 uniform mat4 u_mvp;
 uniform mat4 u_view;
 uniform float u_fog_start;
@@ -20,8 +21,8 @@ out vec2 v_uv;
 out float v_fog;
 void main() {
   gl_Position = u_mvp * vec4(in_pos, 1.0);
-  v_color = in_color.rgb;
-  v_alpha = in_color.a;
+  v_color = in_color;
+  v_alpha = in_alpha;
   v_uv = in_uv;
   float dist = length((u_view * vec4(in_pos, 1.0)).xyz);
   v_fog = clamp((dist - u_fog_start) / (u_fog_end - u_fog_start), 0.0, 1.0);
