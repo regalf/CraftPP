@@ -21,9 +21,16 @@ TEST_CASE("hotbar items emit sprites, counts and bars", "[hud]") {
   hs.hotbar[1] = {278, 1, 33, 250};  // diamond pickaxe, damaged
   hs.hotbar[2] = {319, 5, 0, 0};     // pork, count text
   const auto hud = craftpp::gui::build_hud(hs, font);
-  // One 16x16 sprite per slotted item (items + blocks meshes).
-  CHECK(hud.items.vertices.size() == 2 * 4);
-  CHECK(hud.blocks.vertices.size() == 1 * 4);
+  // One isometric cube (6 faces) for the cobble block, sprites for items.
+  CHECK(hud.blocks.vertices.size() == 6 * 4);
+  CHECK(hud.blocks.indices.size() == 6 * 6);
+  // Cube fits slot 0 exactly (x 339..355, y 461..477 at 854x480).
+  for (const auto& v : hud.blocks.vertices) {
+    CHECK(v.x >= 339.0F);
+    CHECK(v.x <= 355.0F);
+    CHECK(v.y >= 461.0F);
+    CHECK(v.y <= 477.0F);
+  }
   // Count "32" and "5" in the text mesh (with shadows).
   CHECK(hud.text.vertices.size() == 3 * 4);
   CHECK(hud.shadow.vertices.size() == 3 * 4);

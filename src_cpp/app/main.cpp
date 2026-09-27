@@ -1245,9 +1245,13 @@ int main(int argc, char** argv) {
           draw_2d(hud.items, items_tex);
           atlas.bind(0);
           if (!hud.blocks.vertices.empty()) {
+            // Isometric item cubes need depth (faces overlap in 2D).
+            glClear(GL_DEPTH_BUFFER_BIT);
+            glEnable(GL_DEPTH_TEST);
             craftpp::render::Tessellator tess;
             tess.upload(hud.blocks);
             tess.draw();
+            glDisable(GL_DEPTH_TEST);
           }
           draw_2d(hud.shadow, font_tex);
           draw_2d(hud.text, font_tex);
