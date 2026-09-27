@@ -17,6 +17,12 @@ namespace craftpp::world::edit {
 struct Breaker {
   virtual ~Breaker() = default;
   virtual float yaw() const { return 0.0f; }
+  virtual float pitch() const { return 0.0f; }
+  // Eye position for aimed item use (lilypad/bucket raycast). The player
+  // pos already carries the +1.62 eye height like the source render view.
+  virtual double eye_x() const { return 0.0; }
+  virtual double eye_y() const { return 0.0; }
+  virtual double eye_z() const { return 0.0; }
   virtual bool can_mine(int x, int y, int z) const { return true; }  // func_35190_e
   virtual void add_stat(int stat, int n) {}
   virtual void add_exhaustion(float f) {}
@@ -89,6 +95,11 @@ int armor_value(int item_id);  // damageReduceAmount (0 for non-armor)
 // ---- placement rules ----
 bool can_place_at(int id, int x, int y, int z, const BlockView& w);
 bool can_place_on_side(int id, int x, int y, int z, int side, const BlockView& w);
+// The World.canBlockBePlacedAt replaceable set (water/lava/fire/snow/vine):
+// the only ids a placed block may overwrite. Everything else consults the
+// per-block canPlaceBlockAt (air/groundcover for plain blocks, support-only
+// for mounted ones like torch/rail/chest).
+bool is_replaceable_by_blocks(int id);
 // canBlockBePlacedAt (needs the placer collider for the sticky single path).
 bool be_placed_at(EditWorld& w, BlockCollider& collider, int id, int x, int y, int z, int side);
 
@@ -114,6 +125,10 @@ bool use_block_item(EditWorld& w, BlockCollider& collider, Breaker& br, int& sta
 // ItemDoor.onItemUse (two-block doors) + shared placeDoorBlock.
 bool use_door_item(EditWorld& w, BlockCollider& collider, Breaker& br, int& stack_size,
                    int item_id, int x, int y, int z, int side);
+// ItemLilyPad.onItemRightClick: fluid-hitting raycast for a water source
+// (meta 0) with air above, places the pad on top. Ignores x/y/z/side (the
+// aimed block), like the source right-click path.
+bool use_lilypad_item(EditWorld& w, Breaker& br, int& stack_size, double reach);
 // onBlockPlaced (side -> meta) + onBlockPlacedBy (yaw -> meta) orientation.
 void on_placed(EditWorld& w, int id, int x, int y, int z, int side);
 void on_placed_by(EditWorld& w, int id, int x, int y, int z, float yaw);

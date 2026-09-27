@@ -163,6 +163,10 @@ class Player : public Living, public world::edit::Breaker, public ItemUser {
 
   // Breaker hooks
   float yaw() const override { return rotation_yaw; }
+  float pitch() const override { return rotation_pitch; }
+  double eye_x() const override { return pos_x; }
+  double eye_y() const override { return pos_y; }
+  double eye_z() const override { return pos_z; }
   void add_stat(int stat, int n) override { (void)stat; (void)n; }  // M5 stats
   void add_exhaustion(float f) override {
     if (!capabilities.disable_damage && !world->multiplayer()) food.add_exhaustion(f);

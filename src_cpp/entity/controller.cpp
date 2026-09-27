@@ -150,6 +150,13 @@ bool ControllerSP::send_place_block(ItemStack& stack, int x, int y, int z, int s
     }
     return false;
   }
+  if (stack.item_id == 111) {  // lilypad: aimed water-surface path
+    if (world::edit::use_lilypad_item(w, p, stack.stack_size, 4.0)) {
+      p.add_stat(3000000 + stack.item_id, 1);
+      return true;
+    }
+    return false;
+  }
   if (stack.item_id < 256) {
     if (world::edit::use_block_item(w, collider(), p, stack.stack_size, stack.item_id,
                                     stack.damage, x, y, z, side)) {
@@ -198,6 +205,8 @@ bool ControllerCreative::send_place_block(ItemStack& stack, int x, int y, int z,
   if (stack.item_id == 324 || stack.item_id == 330) {
     placed = world::edit::use_door_item(w, collider(), p, stack.stack_size, stack.item_id, x, y,
                                         z, side);
+  } else if (stack.item_id == 111) {
+    placed = world::edit::use_lilypad_item(w, p, stack.stack_size, 4.0);
   } else if (stack.item_id < 256) {
     placed = world::edit::use_block_item(w, collider(), p, stack.stack_size, stack.item_id,
                                          stack.damage, x, y, z, side);

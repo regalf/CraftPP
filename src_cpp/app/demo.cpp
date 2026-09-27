@@ -47,6 +47,7 @@ using craftpp::world::BlockCollider;
 using craftpp::world::LiveWorld;
 
 // Full-cube voxel pick (most terrain here is full cubes; shapes are M5).
+// Fluids are skipped like BlockFluid.canCollideCheck (untargetable).
 bool pick_block(LiveWorld& w, double ex, double ey, double ez, double dx, double dy, double dz,
                 double reach, int& hx, int& hy, int& hz, int& side) {
   int cx = static_cast<int>(std::floor(ex));
@@ -58,7 +59,8 @@ bool pick_block(LiveWorld& w, double ex, double ey, double ez, double dx, double
   while (traveled <= reach) {
     if (!(px == cx && py == cy && pz == cz)) {
       const int id = w.block_id(cx, cy, cz);
-      if (id != 0) {
+      const bool fluid = (id == 8 || id == 9 || id == 10 || id == 11);
+      if (id != 0 && !fluid) {
         hx = cx;
         hy = cy;
         hz = cz;

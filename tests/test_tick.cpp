@@ -1,6 +1,7 @@
 // Day/night math + random block ticks (grass/leaves/ice/fire).
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include "world/block_place.hpp"
 #include "world/fluid.hpp"
 #include "world/live.hpp"
 #include "world/tick.hpp"
@@ -145,4 +146,89 @@ TEST_CASE("lava beside water hardens (live fluids)", "[tick]") {
   LiveFluid::placed(w, 8, 65, 8);
   // Flowing lava (meta 2) + water -> cobblestone.
   CHECK(w.block_id(8, 65, 8) == bid::kCobble);
+}
+
+namespace {
+// Minimal placer with configurable eye + look for aimed item use.
+struct AimBreaker : edit::Breaker {
+  double ex = 8.5, ey = 67.5, ez = 8.5;
+  float yw = 0.0f, pt = 90.0f;  // straight down
+  float yaw() const override { return yw; }
+  float pitch() const override { return pt; }
+  double eye_x() const override { return ex; }
+  double eye_y() const override { return ey; }
+  double eye_z() const override { return ez; }
+};
+}  // namespace
+
+TEST_CASE("water placement rules match vanilla 1.0", "[tick]") {
+  // Replaceable set: fluids/fire/snow/vine only.
+  CHECK(edit::is_replaceable_by_blocks(bid::kWaterMoving));
+  CHECK(edit::is_replaceable_by_blocks(bid::kWaterStill));
+  CHECK(edit::is_replaceable_by_blocks(bid::kLavaMoving));
+  CHECK(edit::is_replaceable_by_blocks(bid::kLavaStill));
+  CHECK(edit::is_replaceable_by_blocks(bid::kFire));
+  CHECK(edit::is_replaceable_by_blocks(bid::kSnowCover));
+  CHECK(edit::is_replaceable_by_blocks(bid::kVine));
+  CHECK(!edit::is_replaceable_by_blocks(bid::kDirt));
+  CHECK(!edit::is_replaceable_by_blocks(bid::kTallGrass));
+
+  // Dirt cannot replace water (Block.canPlaceBlockAt target check).
+  {
+    auto w = flat_world();
+    w.set_raw(8, 64, 8, bid::kWaterStill, 0);
+    AimBreaker br;
+    int stack = 64;
+    CHECK(!edit::use_block_item(w, w.collider(), br, stack, bid::kDirt, 0, 8, 63, 8, 1));
+    CHECK(w.block_id(8, 64, 8) == bid::kWaterStill);
+    CHECK(stack == 64);
+  }
+  // Torch/rail/chest use support-only checks: they replace water.
+  for (const int item : {bid::kTorch, bid::kRail, bid::kChest}) {
+    auto w = flat_world();
+    w.set_raw(8, 64, 8, bid::kWaterStill, 0);
+    AimBreaker br;
+    int stack = 64;
+    CHECK(edit::use_block_item(w, w.collider(), br, stack, item, 0, 8, 63, 8, 1));
+    CHECK(w.block_id(8, 64, 8) == item);
+    CHECK(stack == 63);
+  }
+}
+
+TEST_CASE("lilypad lands on still water via aimed raycast", "[tick]") {
+  // Source water + air above, eye above looking down.
+  {
+    auto w = flat_world();
+    w.set_raw(8, 65, 8, bid::kWaterStill, 0);
+    AimBreaker br;
+    int stack = 16;
+    CHECK(edit::use_lilypad_item(w, br, stack, 4.0));
+    CHECK(w.block_id(8, 66, 8) == bid::kLilyPad);
+    CHECK(stack == 15);
+  }
+  // Flowing water (meta 1) is refused.
+  {
+    auto w = flat_world();
+    w.set_raw(8, 65, 8, bid::kWaterStill, 1);
+    AimBreaker br;
+    int stack = 16;
+    CHECK(!edit::use_lilypad_item(w, br, stack, 4.0));
+    CHECK(stack == 16);
+  }
+  // Solid cover over the water stops the ray.
+  {
+    auto w = flat_world();
+    w.set_raw(8, 65, 8, bid::kWaterStill, 0);
+    w.set_raw(8, 66, 8, bid::kStone, 0);
+    AimBreaker br;
+    int stack = 16;
+    CHECK(!edit::use_lilypad_item(w, br, stack, 4.0));
+    CHECK(stack == 16);
+  }
+}
+
+TEST_CASE("snow drops one snowball", "[tick]") {
+  craftpp::JavaRandom r(3L);
+  CHECK(edit::drop_count(bid::kSnowCover, r) == 1);
+  CHECK(edit::drop_id(bid::kSnowCover, 0, r, 0) == 332);
 }

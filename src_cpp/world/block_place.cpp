@@ -1,5 +1,7 @@
 #include "world/block_place.hpp"
 
+#include <cmath>
+
 #include "core/math_helper.hpp"
 #include "world/blocks.hpp"
 #include "world/fluid.hpp"
@@ -539,8 +541,9 @@ bool can_place_at(int id, int x, int y, int z, const BlockView& w) {
     case bid::kRailDetector:
     case bid::kRepeaterIdle:
     case bid::kRepeaterOn:
-      if (!normal(x, y - 1, z)) return false;
-      return replaceable();
+      // BlockRail.canPlaceBlockAt: support only (no target check), so
+      // rails replace fluids like vanilla.
+      return normal(x, y - 1, z);
     case bid::kPlateStone:
     case bid::kPlateWood:
       return normal(x, y - 1, z) || below == bid::kFence;
@@ -629,13 +632,14 @@ bool can_place_at(int id, int x, int y, int z, const BlockView& w) {
     case bid::kLockedChest:
       return true;
     case bid::kChest: {
-      // No adjacent chest on more than one side (double-chest rule).
+      // BlockChest.canPlaceBlockAt: double-chest rule only (no target
+      // check), so chests replace fluids like vanilla.
       int n = 0;
       if (w.block_id(x - 1, y, z) == id) ++n;
       if (w.block_id(x + 1, y, z) == id) ++n;
       if (w.block_id(x, y, z - 1) == id) ++n;
       if (w.block_id(x, y, z + 1) == id) ++n;
-      return n <= 1 && replaceable();
+      return n <= 1;
     }
     case bid::kPistonExt:
     case bid::kPistonMoving:
@@ -713,11 +717,15 @@ bool be_placed_at(EditWorld& w, BlockCollider& collider, int id, int x, int y, i
     if (w.entities_prevent_place(*box)) return false;
   }
   int cur = w.block_id(x, y, z);
-  if (cur == bid::kWaterMoving || cur == bid::kWaterStill || cur == bid::kLavaMoving ||
-      cur == bid::kLavaStill || cur == bid::kFire || cur == bid::kSnowCover || cur == bid::kVine)
-    cur = 0;  // var8 = null
+  if (is_replaceable_by_blocks(cur)) cur = 0;  // var8 = null
   if (id <= 0 || cur != 0) return false;
   return can_place_on_side(id, x, y, z, side, w);
+}
+
+// Mirrors the World.canBlockBePlacedAt null-set: water/lava/fire/snow/vine.
+bool is_replaceable_by_blocks(int id) {
+  return id == bid::kWaterMoving || id == bid::kWaterStill || id == bid::kLavaMoving ||
+         id == bid::kLavaStill || id == bid::kFire || id == bid::kSnowCover || id == bid::kVine;
 }
 
 // ---- editing pipeline ----
@@ -1052,7 +1060,7 @@ int drop_count(int id, JavaRandom& r) {
     case bid::kLapisOre:
       return 4 + r.next_int(5);
     case bid::kSnowCover:
-      return 0;
+      return 1;  // BlockSnow.harvestBlock: always exactly 1 snowball
     case bid::kLeaves:
       return r.next_int(20) == 0 ? 1 : 0;
     case bid::kBookshelf:
@@ -1231,6 +1239,53 @@ bool use_block_item(EditWorld& w, BlockCollider& collider, Breaker& br, int& sta
   w.play_place_sound("step", tx + 0.5, ty + 0.5, tz + 0.5, 1.0f, 1.0f);
   --stack_size;
   return true;
+}
+
+bool use_lilypad_item(EditWorld& w, Breaker& br, int& stack_size, double reach) {
+  if (stack_size == 0) return false;
+  // getLook (EntityLiving): same convention as the client camera.
+  const double yr = static_cast<double>(br.yaw()) * M_PI / 180.0;
+  const double pr = static_cast<double>(br.pitch()) * M_PI / 180.0;
+  const double dx = -std::sin(yr) * std::cos(pr);
+  const double dy = -std::sin(pr);
+  const double dz = std::cos(yr) * std::cos(pr);
+  // ItemLilyPad raycast (func_40402_a, fluids on): first hittable voxel
+  // decides; fluids stop the ray like any block (canCollideCheck with the
+  // flag hits meta-0 water/lava).
+  double ex = br.eye_x(), ey = br.eye_y(), ez = br.eye_z();
+  int cx = static_cast<int>(std::floor(ex));
+  int cy = static_cast<int>(std::floor(ey));
+  int cz = static_cast<int>(std::floor(ez));
+  const double step = 0.05;
+  double traveled = 0.0;
+  int px = cx, py = cy, pz = cz;
+  while (traveled <= reach) {
+    if (!(px == cx && py == cy && pz == cz)) {
+      const int id = w.block_id(cx, cy, cz);
+      if (id != 0) {
+        const int meta = w.block_meta(cx, cy, cz);
+        const bool water =
+            (id == bid::kWaterMoving || id == bid::kWaterStill) && meta == 0;
+        if (!water || w.block_id(cx, cy + 1, cz) != 0) return false;
+        if (!br.can_mine(cx, cy, cz)) return false;
+        w.set_raw(cx, cy + 1, cz, bid::kLilyPad, 0);
+        if (!w.editing_blocks) notify_neighbors(w, cx, cy + 1, cz, bid::kLilyPad);
+        --stack_size;
+        return true;
+      }
+      px = cx;
+      py = cy;
+      pz = cz;
+    }
+    ex += dx * step;
+    ey += dy * step;
+    ez += dz * step;
+    traveled += step;
+    cx = static_cast<int>(std::floor(ex));
+    cy = static_cast<int>(std::floor(ey));
+    cz = static_cast<int>(std::floor(ez));
+  }
+  return false;
 }
 
 bool use_door_item(EditWorld& w, BlockCollider& collider, Breaker& br, int& stack_size,
