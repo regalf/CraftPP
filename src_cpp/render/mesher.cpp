@@ -1,6 +1,9 @@
 #include "render/mesher.hpp"
 
+#include <cmath>
+
 #include "world/block.hpp"
+#include "world/block_collision.hpp"
 #include "world/blocks.hpp"
 
 namespace craftpp::render {
@@ -53,6 +56,31 @@ void tile_uv(int tile, float& u0, float& u1, float& v0, float& v1) {
   v0 = ty / 256.0F;
   v1 = (ty + 16.0F - 0.01F) / 256.0F;
 }
+
+// Exact-edge tile UVs (fluids use no bleed inset, like the source).
+void tile_uv_exact(int tile, float& u0, float& u1, float& v0, float& v1) {
+  const float tx = static_cast<float>((tile & 15) * 16);
+  const float ty = static_cast<float>(tile & 240);
+  u0 = tx / 256.0F;
+  u1 = (tx + 16.0F) / 256.0F;
+  v0 = ty / 256.0F;
+  v1 = (ty + 16.0F) / 256.0F;
+}
+
+// BlockView over a RegionWorld for the flow-vector query (out of bounds =
+// air, like World.getBlockId; y outside 0..127 reads 0 meta).
+struct RegionView : world::BlockView {
+  const world::RegionWorld& w;
+  explicit RegionView(const world::RegionWorld& w_) : w(w_) {}
+  int block_id(int x, int y, int z) const override {
+    if (y < 0 || y >= world::RegionWorld::kHeight) return 0;
+    return w.get_id(x, y, z);
+  }
+  int block_meta(int x, int y, int z) const override {
+    if (y < 0 || y >= world::RegionWorld::kHeight) return 0;
+    return w.get_meta(x, y, z);
+  }
+};
 
 }  // namespace
 
@@ -117,6 +145,15 @@ Mesh Mesher::mesh_chunk(const world::Chunk& chunk) const {
 }
 
 Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
+  return mesh_live_impl(world, cx, cz, false);
+}
+
+Mesh Mesher::mesh_fluid_live(const world::RegionWorld& world, int cx, int cz) const {
+  return mesh_live_impl(world, cx, cz, true);
+}
+
+Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz,
+                            bool fluids_only) const {
   Mesh mesh;
   mesh.vertices.reserve(8192);
   mesh.indices.reserve(12288);
@@ -170,9 +207,10 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
       for (int y = 0; y < world::RegionWorld::kHeight; ++y) {
         const int id = world.get_id(x, y, z);
         if (id == 0) continue;
+        const bool is_fluid = (id == 8 || id == 9 || id == 10 || id == 11);
+        if (is_fluid != fluids_only) continue;
         const int meta = world.get_meta(x, y, z);
         const int rt = world::bid::render_type(id);
-        const bool water = (id == 8 || id == 9);
         if (rt == 1 || rt == 2 || rt == 3) {
           // renderCrossedSquares: two diagonals x two windings (visible
           // from every side under any culling), inset +-0.45, exact UVs.
@@ -199,6 +237,129 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
                        u1, v0, tr, tg, tb);
           emit_quad_uv(xb, y1, za, u0, v0, xb, y0, za, u0, v1, xa, y0, zb, u1, v1, xa, y1, zb,
                        u1, v0, tr, tg, tb);
+          continue;
+        }
+        if (is_fluid) {
+          // Verbatim RenderBlocks.renderBlockFluids: corner heights from
+          // the 2x2 getFluidHeight average (fluid above forces 1.0, still
+          // cells weigh x10, air counts 1.0, solids are skipped), top quad
+          // with flow-rotated UVs, bottom face, and sides squeezed from
+          // the corner heights down to the block base. Tint is white
+          // (non-swamp water and lava both return 0xFFFFFF).
+          const RegionView view(world);
+          const bool is_water = (id == 8 || id == 9);
+          auto same = [&](int nid) {
+            return is_water ? (nid == 8 || nid == 9) : (nid == 10 || nid == 11);
+          };
+          auto mat_id = [&](int bx, int by, int bz) {
+            if (by < 0 || by >= world::RegionWorld::kHeight) return 0;
+            return world.get_id(bx, by, bz);
+          };
+          auto fluid_height = [&](int bx, int by, int bz) {
+            int count = 0;
+            float sum = 0.0F;
+            for (int s = 0; s < 4; ++s) {
+              const int sx = bx - (s & 1), sz = bz - ((s >> 1) & 1);
+              if (same(mat_id(sx, by + 1, sz))) return 1.0F;
+              const int nid = mat_id(sx, by, sz);
+              if (same(nid)) {
+                const int m = world.get_meta(sx, by, sz);
+                if (m >= 8 || m == 0) {
+                  sum += world::fluid_height_percent(m) * 10.0F;
+                  count += 10;
+                }
+                sum += world::fluid_height_percent(m);
+                ++count;
+              } else if (!world::bid::material_is_solid(nid)) {
+                sum += 1.0F;
+                ++count;
+              }
+            }
+            return 1.0F - sum / static_cast<float>(count);
+          };
+          const float h00 = fluid_height(x, y, z) - 0.001F;
+          const float h01 = fluid_height(x, y, z + 1) - 0.001F;
+          const float h11 = fluid_height(x + 1, y, z + 1) - 0.001F;
+          const float h10 = fluid_height(x + 1, y, z) - 0.001F;
+          const float xf = static_cast<float>(x), yf = static_cast<float>(y),
+                      zf = static_cast<float>(z);
+          const auto flow = world::fluid_flow_vector(id, x, y, z, view);
+          const bool still = (flow.x == 0.0 && flow.z == 0.0);
+          const double ang =
+              still ? 0.0 : std::atan2(flow.z, flow.x) - M_PI * 0.5;
+          const int top_tile = world::bid::block_texture(id, still ? 1 : 2, meta);
+          float tu0, tu1, tv0, tv1;
+          tile_uv_exact(top_tile, tu0, tu1, tv0, tv1);
+          float cu, cv;
+          if (still) {
+            cu = (tu0 + tu1) * 0.5F;
+            cv = (tv0 + tv1) * 0.5F;
+          } else {
+            cu = tu1;
+            cv = tv1;
+          }
+          const float su = static_cast<float>(std::sin(ang)) * 8.0F / 256.0F;
+          const float co = static_cast<float>(std::cos(ang)) * 8.0F / 256.0F;
+          if (!same(mat_id(x, y + 1, z))) {
+            const float b = brightness(x, y, z);
+            emit_quad_uv(xf, yf + h00, zf, cu - co - su, cv - co + su, xf, yf + h01, zf + 1,
+                         cu - co + su, cv + co + su, xf + 1, yf + h11, zf + 1, cu + co + su,
+                         cv + co - su, xf + 1, yf + h10, zf, cu + co - su, cv - co - su, b, b,
+                         b);
+          }
+          const int below = mat_id(x, y - 1, z);
+          if (!same(below) && below != world::bid::kIce && !world::bid::is_opaque(below)) {
+            const float b = brightness(x, y - 1, z) * 0.5F;
+            float bu0, bu1, bv0, bv1;
+            tile_uv_exact(world::bid::block_texture(id, 0, meta), bu0, bu1, bv0, bv1);
+            const float e = yf + 0.001F;
+            emit_quad_uv(xf, e, zf + 1, bu0, bv1, xf, e, zf, bu0, bv0, xf + 1, e, zf, bu1, bv0,
+                         xf + 1, e, zf + 1, bu1, bv1, b, b, b);
+          }
+          const int side_tile = world::bid::block_texture(id, 2, meta);
+          float su0, su1, sv0, sv1;
+          tile_uv_exact(side_tile, su0, su1, sv0, sv1);
+          const float svb = sv1 - 0.01F / 256.0F;
+          const float sue = su1 - 0.01F / 256.0F;
+          const float e = 0.001F;
+          const int nb[4][3] = {{x, y, z - 1}, {x, y, z + 1}, {x - 1, y, z}, {x + 1, y, z}};
+          for (int s = 0; s < 4; ++s) {
+            const int nid = mat_id(nb[s][0], nb[s][1], nb[s][2]);
+            if (same(nid) || nid == world::bid::kIce || world::bid::is_opaque(nid)) continue;
+            const float b = brightness(nb[s][0], nb[s][1], nb[s][2]) * (s < 2 ? 0.8F : 0.6F);
+            float ha, hb;
+            if (s == 0) {
+              ha = h00;
+              hb = h10;
+              const float vt0 = (sv0 * 256.0F + (1.0F - ha) * 16.0F) / 256.0F;
+              const float vt1 = (sv0 * 256.0F + (1.0F - hb) * 16.0F) / 256.0F;
+              emit_quad_uv(xf, yf + ha, zf + e, su0, vt0, xf + 1, yf + hb, zf + e, sue, vt1,
+                           xf + 1, yf, zf + e, sue, svb, xf, yf, zf + e, su0, svb, b, b, b);
+            } else if (s == 1) {
+              ha = h11;
+              hb = h01;
+              const float vt0 = (sv0 * 256.0F + (1.0F - ha) * 16.0F) / 256.0F;
+              const float vt1 = (sv0 * 256.0F + (1.0F - hb) * 16.0F) / 256.0F;
+              emit_quad_uv(xf + 1, yf + ha, zf + 1 - e, su0, vt0, xf, yf + hb, zf + 1 - e, sue,
+                           vt1, xf, yf, zf + 1 - e, sue, svb, xf + 1, yf, zf + 1 - e, su0, svb,
+                           b, b, b);
+            } else if (s == 2) {
+              ha = h01;
+              hb = h00;
+              const float vt0 = (sv0 * 256.0F + (1.0F - ha) * 16.0F) / 256.0F;
+              const float vt1 = (sv0 * 256.0F + (1.0F - hb) * 16.0F) / 256.0F;
+              emit_quad_uv(xf + e, yf + ha, zf + 1, su0, vt0, xf + e, yf + hb, zf, sue, vt1,
+                           xf + e, yf, zf, sue, svb, xf + e, yf, zf + 1, su0, svb, b, b, b);
+            } else {
+              ha = h10;
+              hb = h11;
+              const float vt0 = (sv0 * 256.0F + (1.0F - ha) * 16.0F) / 256.0F;
+              const float vt1 = (sv0 * 256.0F + (1.0F - hb) * 16.0F) / 256.0F;
+              emit_quad_uv(xf + 1 - e, yf + ha, zf, su0, vt0, xf + 1 - e, yf + hb, zf + 1, sue,
+                           vt1, xf + 1 - e, yf, zf + 1, sue, svb, xf + 1 - e, yf, zf, su0, svb,
+                           b, b, b);
+            }
+          }
           continue;
         }
         if (id == world::bid::kStepSingle || id == world::bid::kSnowCover) {
@@ -309,7 +470,7 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
           continue;
         }
         const bool leaves = (id == 18);
-        const bool occluding = world::bid::is_opaque(id) && !leaves && !water;
+          const bool occluding = world::bid::is_opaque(id) && !leaves;
         for (const FaceDesc& f : kFaces) {
           const int nx = x + f.nx, ny = y + f.ny, nz = z + f.nz;
           const int nid = (ny < 0 || ny >= world::RegionWorld::kHeight)
@@ -320,8 +481,6 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
             // shouldSideBeRendered: render unless the neighbour is an
             // opaque cube; fancy leaves never occlude (cutout holes).
             emit = !world::bid::is_opaque(nid) || nid == 18 || nid == 8 || nid == 9;
-          } else if (water) {
-            emit = nid == 0;
           } else {
             emit = nid == 0 || (!world::bid::is_opaque(nid) && nid != id);
           }
@@ -335,11 +494,7 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
           const int tile = world::bid::block_texture(id, side, meta);
           const float b = brightness(nx, ny, nz) * f.shade;
           float r = b, g = b, bl = b;
-          if (water) {
-            r *= 0.15F;
-            g *= 0.35F;
-            bl *= 0.85F;
-          } else if (id == 2) {
+          if (id == 2) {
             if (side == 1) {
               // Top: grayscale tile tinted with the biome color.
               float tr = 1, tg = 1, tb = 1;

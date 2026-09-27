@@ -16,6 +16,7 @@ struct Vertex {
   float b = 1.0F;
   float u = 0.0F;
   float v = 0.0F;
+  float a = 1.0F;  // per-vertex alpha (water overlay 0.5); opaque elsewhere
 };
 
 struct Mesh {

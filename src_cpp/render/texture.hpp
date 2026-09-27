@@ -25,6 +25,8 @@ class Texture {
   ~Texture();
 
   bool upload_nearest(const Image& img);
+  // Partial re-upload of one 16x16 atlas tile (dynamic TextureFX).
+  bool sub_upload_tile(const Image& img, int tile, const std::uint8_t* rgba16);
   void bind(unsigned unit = 0) const;
   unsigned int id() const { return id_; }
 

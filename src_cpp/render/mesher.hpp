@@ -40,7 +40,17 @@ struct Mesher {
   // neighbours), per-face stored light, biome grass tint, and cross quads
   // for render-type 1/2/3 (plants/torch/fire). Complex geometry types
   // render as textured cubes for now (later milestones).
+  //
+  // Fluids are excluded: they go in mesh_fluid_live (the transparent
+  // pass — like the engine's renderPass 1, drawn after all opaque).
   Mesh mesh_live(const world::RegionWorld& world, int cx, int cz) const;
+
+  // Fluid-only pass (renderBlockFluids): lowered surfaces, flow UVs.
+  // Drawn after every opaque chunk with blending on.
+  Mesh mesh_fluid_live(const world::RegionWorld& world, int cx, int cz) const;
+
+ private:
+  Mesh mesh_live_impl(const world::RegionWorld& world, int cx, int cz, bool fluids_only) const;
 };
 
 }  // namespace craftpp::render

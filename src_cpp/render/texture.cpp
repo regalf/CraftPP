@@ -44,6 +44,20 @@ void Texture::bind(unsigned unit) const {
   glBindTexture(GL_TEXTURE_2D, id_);
 }
 
+bool Texture::sub_upload_tile(const Image& img, int tile, const std::uint8_t* rgba16) {
+  if (id_ == 0 || img.width < 256 || rgba16 == nullptr) return false;
+  const int tx = (tile & 15) * 16;
+  // Tile t occupies buffer rows ty..ty+15 (same convention as tile_uv:
+  // no vertical flip anywhere in this pipeline).
+  const int ty = tile & 240;
+  glBindTexture(GL_TEXTURE_2D, id_);
+  for (int row = 0; row < 16; ++row) {
+    glTexSubImage2D(GL_TEXTURE_2D, 0, tx, ty + row, 16, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                    rgba16 + row * 16 * 4);
+  }
+  return glGetError() == GL_NO_ERROR;
+}
+
 bool grass_tint_from_map(const Image& colormap, float& r, float& g, float& b) {
   return sample_colormap(colormap, 0.5F, 1.0F, r, g, b);
 }

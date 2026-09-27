@@ -54,6 +54,7 @@ add_library(craftpp_core
   src_cpp/render/frustum.cpp
   src_cpp/render/shader.cpp
   src_cpp/render/texture.cpp
+  src_cpp/render/texture_fx.cpp
   src_cpp/render/stb_impl.cpp
   src_cpp/render/tessellator.cpp
   src_cpp/gui/crafting.cpp

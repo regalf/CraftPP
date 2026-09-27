@@ -38,6 +38,7 @@
 #include "gui/hud.hpp"
 #include "gui/lang.hpp"
 #include "gui/screens.hpp"
+#include "render/texture_fx.hpp"
 #include "render/frustum.hpp"
 #include "render/mesher.hpp"
 #include "render/model.hpp"
@@ -283,6 +284,7 @@ struct Session {
   int sx = 8, sz = 8, ground = 64;
   float yaw = 0.0F, pitch = 0.0F;
   std::map<std::pair<int, int>, craftpp::render::Tessellator> tess_map;
+  std::map<std::pair<int, int>, craftpp::render::Tessellator> fluid_map;  // pass 1
   // Climate prefetch for tinting (set by start_game, used by remeshing).
   std::function<void(int, int)> refill_tint = [](int, int) {};
   // Async world build (loading screen): gen queue then populate queue.
@@ -355,18 +357,26 @@ int main(int argc, char** argv) {
   int exit_code = 0;
   {
     craftpp::render::Texture atlas, pig_tex, zombie_tex, gui_tex, icons_tex, font_tex, items_tex,
-        bg_tex, logo_tex;
+        bg_tex, logo_tex, water_tex;
+    craftpp::render::Image atlas_img;  // retained for TextureFX tile uploads
+    craftpp::render::FluidTextureFx fx_water(craftpp::render::FluidTextureFx::Kind::Water),
+        fx_water_flow(craftpp::render::FluidTextureFx::Kind::WaterFlow),
+        fx_lava(craftpp::render::FluidTextureFx::Kind::Lava),
+        fx_lava_flow(craftpp::render::FluidTextureFx::Kind::LavaFlow);
+    bool water_overlay_ok = false;
     craftpp::gui::Font font;
     auto must_load = [&](const std::string& name, craftpp::render::Texture& tex, int w = 0,
-                         int h = 0) {
+                         int h = 0, craftpp::render::Image* keep = nullptr) {
       craftpp::render::Image img;
       if (!craftpp::render::load_png((args.assets + name).c_str(), img, err) ||
           (w > 0 && (img.width != w || img.height != h)) || !tex.upload_nearest(img)) {
         craftpp::log_error("cannot load " + name + ": " + err);
         exit_code = 1;
+      } else if (keep != nullptr) {
+        *keep = img;
       }
     };
-    must_load("/terrain.png", atlas);
+    must_load("/terrain.png", atlas, 0, 0, &atlas_img);
     must_load("/mob/pig.png", pig_tex, 64, 32);
     must_load("/mob/zombie.png", zombie_tex, 64, 32);
     must_load("/gui/gui.png", gui_tex);
@@ -374,6 +384,20 @@ int main(int argc, char** argv) {
     must_load("/gui/background.png", bg_tex);
     must_load("/title/mclogo.png", logo_tex);
     must_load("/gui/items.png", items_tex);
+    {
+      // Water overlay (ItemRenderer /misc/water.png): optional, tiled, so
+      // REPEAT wrap. Missing file only disables the overlay.
+      craftpp::render::Image img;
+      if (craftpp::render::load_png((args.assets + "/misc/water.png").c_str(), img, err) &&
+          water_tex.upload_nearest(img)) {
+        water_tex.bind(0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        water_overlay_ok = true;
+      } else {
+        craftpp::log_info("no /misc/water.png: underwater overlay disabled");
+      }
+    }
     {
       craftpp::render::Image img;
       if (!craftpp::render::load_png((args.assets + "/font/default.png").c_str(), img, err) ||
@@ -611,6 +635,7 @@ int main(int argc, char** argv) {
         world.populate_one(cx, cz);
         game->refill_tint(cx, cz);
         game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
+        game->fluid_map[{cx, cz}].upload(mesher.mesh_fluid_live(world.region(), cx, cz));
         world.clear_dirty(cx, cz);
         ui.loading_progress = (done + 1) * 100 / total;
         return !game->load_pop.empty();
@@ -622,6 +647,7 @@ int main(int argc, char** argv) {
         if (game->tess_map.count({cx, cz}) != 0) continue;
         game->refill_tint(cx, cz);
         game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
+        game->fluid_map[{cx, cz}].upload(mesher.mesh_fluid_live(world.region(), cx, cz));
         world.clear_dirty(cx, cz);
       }
       craftpp::gui::open_screen(ui, craftpp::gui::Screen::None, sctx);
@@ -1127,15 +1153,56 @@ int main(int argc, char** argv) {
         terrain_prog.use();
         terrain_prog.set_mat4(t_mvp, &vp[0][0]);
         terrain_prog.set_mat4(t_view, &view[0][0]);
-        terrain_prog.set_float(t_fog_start, 60.0F);
-        terrain_prog.set_float(t_fog_end, 220.0F);
-        terrain_prog.set_vec3(t_fog_color, 0.74F * daylight, 0.84F * daylight, 1.0F * daylight);
+        // Dynamic water/lava tiles (TextureFX), uploaded into the atlas.
+        for (auto* fx : {&fx_water, &fx_water_flow, &fx_lava, &fx_lava_flow}) {
+          const auto& px = fx->tick();
+          atlas.sub_upload_tile(atlas_img, fx->tile(), px.data());
+        }
+        // Camera inside a fluid (eye below the lowered surface, like
+        // isInsideOfMaterial/ActiveRenderInfo): EXP-style fog approximated
+        // with the linear uniforms (water ~2..16, lava ~0..0.8).
+        const int exb = static_cast<int>(std::floor(eye.x));
+        const int eyb = static_cast<int>(std::floor(eye.y));
+        const int ezb = static_cast<int>(std::floor(eye.z));
+        const int eye_id = world.block_id(exb, eyb, ezb);
+        const int eye_meta = world.block_meta(exb, eyb, ezb);
+        const float eye_surface = static_cast<float>(eyb + 1) -
+                                  (craftpp::world::fluid_height_percent(eye_meta) - 1.0F / 9.0F);
+        const bool eye_in_fluid =
+            (eye_id >= 8 && eye_id <= 11) && eye.y < static_cast<double>(eye_surface);
+        const bool eye_water = eye_in_fluid && eye_id <= 9;
+        const bool eye_lava = eye_in_fluid && eye_id >= 10;
+        float fog_start = 60.0F, fog_end = 220.0F;
+        float fog_r = 0.74F * daylight, fog_g = 0.84F * daylight, fog_b = 1.0F * daylight;
+        if (eye_water) {
+          fog_start = 2.0F;
+          fog_end = 16.0F;
+          fog_r = 0.02F * daylight;
+          fog_g = 0.02F * daylight;
+          fog_b = 0.2F * daylight;
+          glClearColor(fog_r, fog_g, fog_b, 1.0F);
+          glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        } else if (eye_lava) {
+          fog_start = 0.0F;
+          fog_end = 0.8F;
+          fog_r = 0.6F * daylight;
+          fog_g = 0.1F * daylight;
+          fog_b = 0.0F;
+          glClearColor(fog_r, fog_g, fog_b, 1.0F);
+          glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
+        terrain_prog.set_float(t_fog_start, fog_start);
+        terrain_prog.set_float(t_fog_end, fog_end);
+        terrain_prog.set_vec3(t_fog_color, fog_r, fog_g, fog_b);
         terrain_prog.set_int(t_tex, 0);
         atlas.bind(0);
+        glEnable(GL_BLEND);  // water surface alpha (animated texture)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         for (auto& [key, tess] : game->tess_map) {
           if (world.is_dirty(key.first, key.second)) {
             game->refill_tint(key.first, key.second);
             tess.upload(mesher.mesh_live(world.region(), key.first, key.second));
+            game->fluid_map[key].upload(mesher.mesh_fluid_live(world.region(), key.first, key.second));
             world.clear_dirty(key.first, key.second);
           }
           const craftpp::Aabb box(key.first * 16.0, 0.0, key.second * 16.0,
@@ -1189,15 +1256,24 @@ int main(int argc, char** argv) {
           terrain_prog.use();
           terrain_prog.set_mat4(t_mvp, &vp[0][0]);
           terrain_prog.set_mat4(t_view, &view[0][0]);
-          terrain_prog.set_float(t_fog_start, 60.0F);
-          terrain_prog.set_float(t_fog_end, 220.0F);
-          terrain_prog.set_vec3(t_fog_color, 0.74F * daylight, 0.84F * daylight, 1.0F * daylight);
+          terrain_prog.set_float(t_fog_start, fog_start);
+          terrain_prog.set_float(t_fog_end, fog_end);
+          terrain_prog.set_vec3(t_fog_color, fog_r, fog_g, fog_b);
           terrain_prog.set_int(t_tex, 0);
           craftpp::render::Tessellator mtess;
           mtess.upload(mm);
           mtess.draw();
         }
         glEnable(GL_CULL_FACE);
+
+        // Transparent pass (renderPass 1): all fluids after all opaque,
+        // so lakebeds show through the blended surface.
+        atlas.bind(0);
+        for (auto& [key, tess] : game->fluid_map) {
+          const craftpp::Aabb box(key.first * 16.0, 0.0, key.second * 16.0,
+                                  key.first * 16.0 + 16.0, 128.0, key.second * 16.0 + 16.0);
+          if (frustum.box_visible(box)) tess.draw();
+        }
         flat_prog.use();
         flat_prog.set_mat4(f_mvp, &vp[0][0]);
         flat_prog.set_float(f_bright, daylight);
@@ -1279,6 +1355,28 @@ int main(int argc, char** argv) {
             tess.draw();
           };
           draw_2d(hud.chrome, gui_tex);
+          // Underwater overlay (ItemRenderer.renderWarpedTextureOverlay):
+          // fullscreen water tile scrolling against yaw/pitch, entity
+          // brightness, alpha 0.5. No lava overlay exists in 1.0.
+          if (eye_water && water_overlay_ok && ui.cur == craftpp::gui::Screen::None) {
+            const float eye_light =
+                static_cast<float>(world.region().full_light(exb, eyb, ezb)) / 15.0F;
+            const float uo = -game->yaw / 64.0F, vo = game->pitch / 64.0F;
+            const float fw = static_cast<float>(w), fh = static_cast<float>(h);
+            craftpp::render::Mesh ov;
+            ov.vertices.push_back({0, 0, 0, eye_light, eye_light, eye_light, 4.0F + uo, 4.0F + vo,
+                                   0.5F});
+            ov.vertices.push_back({fw, 0, 0, eye_light, eye_light, eye_light, 0.0F + uo, 4.0F + vo,
+                                   0.5F});
+            ov.vertices.push_back({fw, fh, 0, eye_light, eye_light, eye_light, 0.0F + uo,
+                                   0.0F + vo, 0.5F});
+            ov.vertices.push_back({0, fh, 0, eye_light, eye_light, eye_light, 4.0F + uo, 0.0F + vo,
+                                   0.5F});
+            ov.indices.insert(ov.indices.end(), {0, 1, 2, 0, 2, 3});
+            glDisable(GL_CULL_FACE);
+            draw_2d(ov, water_tex);
+            glEnable(GL_CULL_FACE);
+          }
           draw_2d(hud.icons, icons_tex);
           draw_2d(hud.items, items_tex);
           atlas.bind(0);
