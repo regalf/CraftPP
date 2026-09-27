@@ -165,7 +165,7 @@ TEST_CASE("entities, tiles, tileticks and player survive save/load", "[save]") {
 
   // Player with inventory, armor, food and xp.
   TestPlayer p(&w);
-  p.set_position(8.5, 70.0, 8.5);  // pos_y includes +1.62
+  p.set_position(8.5, 70.0, 8.5);  // raw pos_y (feet + 1.62 in game)
   p.rotation_yaw = 45.0f;
   p.health = 17;
   p.inventory.main[0] = craftpp::entity::ItemStack(278, 1, 33);  // pickaxe dmg
@@ -231,14 +231,14 @@ TEST_CASE("entities, tiles, tileticks and player survive save/load", "[save]") {
   REQUIRE(info->player.has_value());
   TestPlayer p2(&l);
   apply_player_tag(p2, *info->player);
-  // Round-trip identity (pos_y raw); the tag itself stores feet (vanilla
-  // Pos convention: raw - y_offset).
+  // Round-trip identity; the tag stores posY + ySize verbatim (vanilla
+  // Entity.writeToNBT), so Java reads the same feet + 1.62 back.
   CHECK(p2.pos_y == Catch::Approx(70.0));
   // Physics box synced (stale bbox used to drop loaded players in the void).
   CHECK(p2.bbox.min_y == Catch::Approx(70.0 - 1.62).margin(0.01));
   CHECK(lz->bbox.min_y == Catch::Approx(68.0).margin(0.01));
   CHECK(info->player->compound->find("Pos")->list->items[1].f64 ==
-        Catch::Approx(70.0 - 1.62));
+        Catch::Approx(70.0));
   CHECK(p2.rotation_yaw == Catch::Approx(45.0f));
   CHECK(p2.health == 17);
   CHECK(p2.inventory.main[0]->item_id == 278);

@@ -75,9 +75,10 @@ nbt::Tag float_list(float a, float b) {
                              {nbt::Tag::make_float(a), nbt::Tag::make_float(b)});
 }
 
-// Entity.writeToNBT base tags; feet_y is the vanilla posY (feet) convention.
-void set_entity_base(nbt::TagCompound& c, const entity::Entity& e, double feet_y, int air) {
-  c.set("Pos", double_list(e.pos_x, feet_y, e.pos_z));
+// Entity.writeToNBT base tags. Pos.y is posY + ySize verbatim like the
+// source (posY already carries yOffset, e.g. +1.62 for players).
+void set_entity_base(nbt::TagCompound& c, const entity::Entity& e, int air) {
+  c.set("Pos", double_list(e.pos_x, e.pos_y + e.y_size, e.pos_z));
   c.set("Motion", double_list(e.motion_x, e.motion_y, e.motion_z));
   c.set("Rotation", float_list(e.rotation_yaw, e.rotation_pitch));
   c.set("FallDistance", nbt::Tag::make_float(e.fall_distance));
@@ -117,7 +118,7 @@ const char* entity_kind_id(const entity::Entity& e) {
 nbt::Tag mob_tag(const entity::Living& m, const char* id) {
   nbt::TagCompound c;
   c.set("id", nbt::Tag::make_string(id));
-  set_entity_base(c, m, m.pos_y, m.air_supply);
+  set_entity_base(c, m, m.air_supply);
   set_living_tags(c, m);
   return nbt::Tag::make_compound(std::move(c));
 }
@@ -125,7 +126,7 @@ nbt::Tag mob_tag(const entity::Living& m, const char* id) {
 nbt::Tag drop_tag(const entity::DroppedItem& d) {
   nbt::TagCompound c;
   c.set("id", nbt::Tag::make_string("Item"));
-  set_entity_base(c, d, d.pos_y, 300);
+  set_entity_base(c, d, 300);
   c.set("Health", nbt::Tag::make_short(static_cast<std::int16_t>(d.health & 255)));
   c.set("Age", nbt::Tag::make_short(static_cast<std::int16_t>(d.age)));
   c.set("Item", item_stack_tag(d.item));
@@ -180,13 +181,13 @@ nbt::Tag tile_tag(const tile::TileEntity& t) {
   return nbt::Tag::make_compound(std::move(c));
 }
 
-void read_entity_base(const nbt::TagCompound& c, entity::Entity& e, double& feet_y) {
+void read_entity_base(const nbt::TagCompound& c, entity::Entity& e, double& pos_y) {
   const nbt::Tag& pos = need(c, "Pos");
   const nbt::Tag& mot = need(c, "Motion");
   const nbt::Tag& rot = need(c, "Rotation");
-  feet_y = pos.list->items[1].f64;
+  pos_y = pos.list->items[1].f64;
   e.pos_x = pos.list->items[0].f64;
-  e.pos_y = feet_y;
+  e.pos_y = pos_y;
   e.pos_z = pos.list->items[2].f64;
   e.prev_pos_x = e.last_tick_pos_x = e.pos_x;
   e.prev_pos_y = e.last_tick_pos_y = e.pos_y;
@@ -357,14 +358,13 @@ bool chunk_from_tag(const nbt::Tag& root, LiveWorld& world, int cx, int cz) {
         const nbt::TagCompound& ec = *e.compound;
         try {
           const std::string& id = need(ec, "id").str;
-          double feet = 0.0;
+          double tag_y = 0.0;
           if (id == "Zombie" || id == "Pig") {
             auto m = id == "Zombie" ? static_cast<std::unique_ptr<entity::Living>>(
                                           std::make_unique<entity::Zombie>(&world))
                                     : static_cast<std::unique_ptr<entity::Living>>(
                                           std::make_unique<entity::Pig>(&world));
-            read_entity_base(ec, *m, feet);
-            m->pos_y = feet;  // mob y_offset is 0
+            read_entity_base(ec, *m, tag_y);
             m->health = need(ec, "Health").i16;
             m->hurt_time = need(ec, "HurtTime").i16;
             m->death_time = need(ec, "DeathTime").i16;
@@ -375,9 +375,7 @@ bool chunk_from_tag(const nbt::Tag& root, LiveWorld& world, int cx, int cz) {
             entity::ItemStack stack = item_stack_from_tag(need(ec, "Item"));
             auto d = std::make_unique<entity::DroppedItem>(&world, 0.0, -100.0, 0.0, stack,
                                                            0.0, 0.0, 0.0);
-            read_entity_base(ec, *d, feet);
-            d->pos_y = feet;
-            d->prev_pos_y = d->last_tick_pos_y = feet;
+            read_entity_base(ec, *d, tag_y);
             d->health = need(ec, "Health").i16 & 255;
             d->age = need(ec, "Age").i16;
             d->pickup_delay = 0;  // not persisted (matches the source)
@@ -499,7 +497,7 @@ void write_level_dat(const std::string& save_dir, const WorldInfoData& info) {
 nbt::Tag player_tag(const entity::Player& p) {
   nbt::TagCompound c;
   c.set("id", nbt::Tag::make_string("Player"));
-  set_entity_base(c, p, p.pos_y - p.y_offset, p.air_supply);
+  set_entity_base(c, p, p.air_supply);
   set_living_tags(c, p);
   // InventoryPlayer.writeToNBT: main slots 0-35, armor 100-103.
   std::vector<nbt::Tag> inv;
@@ -538,11 +536,8 @@ void apply_player_tag(entity::Player& p, const nbt::Tag& tag) {
   if (tag.type != nbt::TagType::Compound) return;
   const nbt::TagCompound& c = *tag.compound;
   try {
-    double feet = 0.0;
-    read_entity_base(c, p, feet);
-    p.pos_y = feet + p.y_offset;  // feet + 1.62 convention
-    p.prev_pos_y = p.last_tick_pos_y = p.pos_y;
-    p.set_position(p.pos_x, p.pos_y, p.pos_z);  // re-sync bbox for physics
+    double tag_y = 0.0;
+    read_entity_base(c, p, tag_y);  // posY verbatim (carries +1.62 already)
     p.health = need(c, "Health").i16;
     p.hurt_time = need(c, "HurtTime").i16;
     p.death_time = need(c, "DeathTime").i16;
