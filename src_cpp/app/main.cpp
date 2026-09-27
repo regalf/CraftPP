@@ -244,6 +244,16 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
   if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER) g_enter = true;
 }
 
+// Render interpolation (partial tick): entities glide between their
+// 20 TPS states instead of jumping. Alpha = fraction into the next tick.
+inline double lerp_pos(double prev, double cur, double a) { return prev + (cur - prev) * a; }
+inline float lerp_angle(float prev, float cur, double a) {
+  float d = cur - prev;
+  while (d > 180.0F) d -= 360.0F;
+  while (d < -180.0F) d += 360.0F;
+  return prev + d * static_cast<float>(a);
+}
+
 // ---- live game session (owned while playing, torn down to title) ----
 struct Session {
   std::unique_ptr<LiveWorld> world;
@@ -1084,7 +1094,12 @@ int main(int argc, char** argv) {
         glCullFace(GL_BACK);
         const float yr = game->yaw * 3.14159265f / 180.0f;
         const float pr = game->pitch * 3.14159265f / 180.0f;
-        glm::vec3 eye(player.pos_x, player.pos_y + 0.12, player.pos_z);
+        double alpha = game->accumulator / kTick;
+        if (alpha < 0.0) alpha = 0.0;
+        if (alpha > 1.0) alpha = 1.0;
+        glm::vec3 eye(lerp_pos(player.prev_pos_x, player.pos_x, alpha),
+                      lerp_pos(player.prev_pos_y, player.pos_y, alpha) + 0.12,
+                      lerp_pos(player.prev_pos_z, player.pos_z, alpha));
         glm::vec3 look(-std::sin(yr) * std::cos(pr), -std::sin(pr), std::cos(yr) * std::cos(pr));
         glm::mat4 view = glm::lookAt(eye, eye + look, glm::vec3(0.0F, 1.0F, 0.0F));
         glm::mat4 proj =
@@ -1132,23 +1147,27 @@ int main(int argc, char** argv) {
           if (!m || m->is_dead) continue;
           const bool pig = dynamic_cast<craftpp::entity::Pig*>(m.get()) != nullptr;
           const float moving = std::abs(m->move_forward) > 0.01F ? 1.0F : 0.0F;
+          const float yaw_i = lerp_angle(m->prev_rotation_yaw, m->rotation_yaw, alpha);
           craftpp::render::Mesh mm;
           if (pig) {
             mm = craftpp::render::entity_mesh(
                 craftpp::render::pig_parts(m->distance_walked, moving, 0.0F, 0.0F), 64, 32,
-                180.0F - m->rotation_yaw, 1.0F);
+                180.0F - yaw_i, 1.0F);
             pig_tex.bind(0);
           } else {
             mm = craftpp::render::entity_mesh(
                 craftpp::render::zombie_parts(m->distance_walked, moving, 0.0F, m->ticks_existed,
                                               0.0F, 0.0F),
-                64, 32, 180.0F - m->rotation_yaw, 1.0F);
+                64, 32, 180.0F - yaw_i, 1.0F);
             zombie_tex.bind(0);
           }
+          const float mx = static_cast<float>(lerp_pos(m->prev_pos_x, m->pos_x, alpha));
+          const float my = static_cast<float>(lerp_pos(m->prev_pos_y, m->pos_y, alpha));
+          const float mz = static_cast<float>(lerp_pos(m->prev_pos_z, m->pos_z, alpha));
           for (auto& v : mm.vertices) {
-            v.x += static_cast<float>(m->pos_x);
-            v.y += static_cast<float>(m->pos_y);
-            v.z += static_cast<float>(m->pos_z);
+            v.x += mx;
+            v.y += my;
+            v.z += mz;
           }
           terrain_prog.use();
           terrain_prog.set_mat4(t_mvp, &vp[0][0]);
@@ -1185,7 +1204,9 @@ int main(int argc, char** argv) {
           };
           for (auto& it : world.items()) {
             if (!it || it->is_dead) continue;
-            box(it->pos_x, it->pos_y, it->pos_z, 0.12, 0.25, 0.95f, 0.85f, 0.3f);
+            box(lerp_pos(it->prev_pos_x, it->pos_x, alpha),
+                lerp_pos(it->prev_pos_y, it->pos_y, alpha),
+                lerp_pos(it->prev_pos_z, it->pos_z, alpha), 0.12, 0.25, 0.95f, 0.85f, 0.3f);
           }
           if (!em.vertices.empty()) {
             craftpp::render::Tessellator etess;
