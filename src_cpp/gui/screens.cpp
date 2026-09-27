@@ -451,14 +451,14 @@ ScreenMeshes draw_screen(ScreenUi& ui, const ScreenCtx& ctx, const Font& font, i
       break;
     }
     case Screen::Ingame: {
-      // drawDefaultBackground with a world: translucent gradient over game.
-      draw_rect(m.chrome, 0, 0, w, h, 0xFF000000);  // (gradient approx, opaque dim)
+      // No dim quad (flat shader is opaque): frozen world stays visible
+      // behind the buttons like the source's translucent gradient.
       title("Game menu", 40);
       buttons();
       break;
     }
     case Screen::GameOver: {
-      draw_rect(m.chrome, 0, 0, w, h, 0xFF000000);
+      draw_rect(m.flat, 0, 0, w, h, 0xFF000000);
       // 2x scaled title.
       auto t = font.build_text(tr(L, "deathScreen.title"), 0, 0, 0xFFFFFFFF, false);
       for (auto& v : t.vertices) {
