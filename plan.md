@@ -161,7 +161,10 @@ fly double-tap, TPS meter, auto-respawn).
    heights, ladder/vine wall quads, precise shape picking, fluid-skip),
    entity pickup bbox, drops no-push gate, harvest-before-removal,
    placement entity check. LEFT in fluids: swamp water tint
-   (field_40256_A), vine spread ticks.
+   (field_40256_A), vine spread ticks. Placement audit vs Java done:
+   fluids untargetable (no mining), normal blocks cannot replace water,
+   support blocks (torch/rail/chest/...) can, lilypad via water raycast,
+   snow drops 1 snowball.
 
 Known debts: demo SIGSEGV masked by respawn (not root-caused, see
 known-issues); zombie feel pending real paths (interpolation done).
