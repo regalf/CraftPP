@@ -169,6 +169,12 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
     return manager_.temperatures(x, z, 1, 1)[0];
   }
   float rainfall(int x, int z) const { return manager_.rainfalls(x, z, 1, 1)[0]; }
+  // Bulk climate for meshing (one GenLayer rect query, not per-column).
+  void climate_rect(int x0, int z0, int w, int h, std::vector<float>& t,
+                    std::vector<float>& r) const {
+    t = manager_.temperatures(x0, z0, w, h);
+    r = manager_.rainfalls(x0, z0, w, h);
+  }
   int stored_height(int x, int z) const { return region_.height_value(x, z); }
   // Raw region access for the client mesher (read-only).
   const RegionWorld& region() const { return region_; }

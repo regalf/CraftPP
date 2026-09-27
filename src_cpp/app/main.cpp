@@ -6,6 +6,7 @@
 // --save/--seed boot straight into the game (headless friendly).
 
 #include <chrono>
+#include <climits>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -255,6 +256,8 @@ struct Session {
   int sx = 8, sz = 8, ground = 64;
   float yaw = 0.0F, pitch = 0.0F;
   std::map<std::pair<int, int>, craftpp::render::Tessellator> tess_map;
+  // Climate prefetch for tinting (set by start_game, used by remeshing).
+  std::function<void(int, int)> refill_tint = [](int, int) {};
   // Per-frame input edges.
   double last_x = 0.0, last_y = 0.0;
   bool have_mouse = false;
@@ -437,10 +440,34 @@ int main(int argc, char** argv) {
       session->save_dir = save_dir;
       session->world = std::make_unique<LiveWorld>(info.has_value() ? info->seed : seed);
       LiveWorld& world = *session->world;
-      // Per-column biome tints (ColorizerGrass/ColorizerFoliage).
-      mesher.tint = [&](int x, int z, bool foliage, float& r, float& g, float& b) {
-        const float t = world.temperature(x, z);
-        const float h = world.rainfall(x, z);
+      // Per-column biome tints (ColorizerGrass/ColorizerFoliage). Climate
+      // is prefetched per remesh (chunk + 1 border); the callback only
+      // reads the arrays (per-column GenLayer queries tanked fps).
+      struct TintCache {
+        int ox = INT_MAX, oz = INT_MAX;
+        float t[18][18] = {};
+        float h[18][18] = {};
+      };
+      auto tint_cache = std::make_shared<TintCache>();
+      auto refill_tint = [tint_cache, &world](int cx, int cz) {
+        std::vector<float> t, h;
+        world.climate_rect(cx * 16 - 1, cz * 16 - 1, 18, 18, t, h);
+        for (int dz = 0; dz < 18; ++dz)
+          for (int dx = 0; dx < 18; ++dx) {
+            tint_cache->t[dz][dx] = t[dz * 18 + dx];
+            tint_cache->h[dz][dx] = h[dz * 18 + dx];
+          }
+        tint_cache->ox = cx * 16 - 1;
+        tint_cache->oz = cz * 16 - 1;
+      };
+      mesher.tint = [tint_cache, &grass_map, &foliage_map](int x, int z, bool foliage, float& r,
+                                                           float& g, float& b) {
+        const int dx = x - tint_cache->ox, dz = z - tint_cache->oz;
+        float t = 0.5F, h = 1.0F;
+        if (dx >= 0 && dx < 18 && dz >= 0 && dz < 18) {
+          t = tint_cache->t[dz][dx];
+          h = tint_cache->h[dz][dx];
+        }
         if (!craftpp::render::sample_colormap(foliage ? foliage_map : grass_map, t, h, r, g,
                                               b)) {
           r = g = b = 1.0F;
@@ -505,9 +532,11 @@ int main(int argc, char** argv) {
       apply_difficulty();
       for (int cx = -1; cx <= 1; ++cx)
         for (int cz = -1; cz <= 1; ++cz) {
+          refill_tint(cx, cz);
           session->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
           world.clear_dirty(cx, cz);
         }
+      session->refill_tint = refill_tint;
       game = std::move(session);
       craftpp::gui::open_screen(ui, craftpp::gui::Screen::None, sctx);
       set_screen_cursor();
@@ -1001,6 +1030,7 @@ int main(int argc, char** argv) {
         atlas.bind(0);
         for (auto& [key, tess] : game->tess_map) {
           if (world.is_dirty(key.first, key.second)) {
+            game->refill_tint(key.first, key.second);
             tess.upload(mesher.mesh_live(world.region(), key.first, key.second));
             world.clear_dirty(key.first, key.second);
           }
