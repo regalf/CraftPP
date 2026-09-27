@@ -31,3 +31,6 @@ compile_commands.json
 HANDOFF.md
 /craftpp
 /craftpp_demo
+
+# Local game saves (McRegion worlds created while playing)
+saves/
