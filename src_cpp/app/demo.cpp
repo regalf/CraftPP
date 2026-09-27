@@ -246,6 +246,7 @@ int main(int argc, char** argv) {
     if (loaded) craftpp::log_info("loaded save from " + save_dir);
   }
   world.provide_area(-1, -1, 1, 1);  // terrain + caves + populate + light
+  craftpp::log_info("DEPRECATED: craftpp_demo is unmaintained; use craftpp instead");
   craftpp::log_info("demo world ready (3x3 live chunks: caves + populate + light)");
 
   // Spawn: first flat 3x3 around the origin (avoids wedge push-out drift).
