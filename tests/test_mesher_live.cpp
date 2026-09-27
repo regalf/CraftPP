@@ -32,11 +32,33 @@ TEST_CASE("mesh_live emits textured top faces with grass tile", "[mesher]") {
   for (const auto& v : mesh.vertices) {
     if (v.y == 65.0F && v.u < 0.0626F && v.v < 0.0626F) {
       found_grass_top = true;
-      // top shade 1.0, full daylight brightness 1.0
-      CHECK(v.r == Catch::Approx(1.0F * m.tint_r).margin(0.01));
+      // top shade 1.0, full daylight, plains grass tint (~0.486 red)
+      CHECK(v.r == Catch::Approx(0.486F).margin(0.01));
     }
   }
   CHECK(found_grass_top);
+}
+
+TEST_CASE("mesh_live tints tall grass with the biome callback", "[mesher]") {
+  craftpp::render::Mesher m;
+  m.tint = [](int, int, bool foliage, float& r, float& g, float& b) {
+    r = foliage ? 0.0F : 1.0F;
+    g = foliage ? 1.0F : 0.0F;
+    b = 0.0F;
+  };
+  auto w = flat_world();
+  w.set_id(5, 65, 5, 31);  // tall grass
+  const auto mesh = m.mesh_live(w, 0, 0);
+  // Tall-grass top verts (y=66 over the tuft cell) carry the grass tint.
+  bool tinted = false;
+  for (const auto& v : mesh.vertices) {
+    if (v.y == 66.0F && v.x >= 5.0F && v.x <= 6.0F && v.z >= 5.0F && v.z <= 6.0F && v.r > 0.9F &&
+        v.g < 0.1F) {
+      tinted = true;
+      break;
+    }
+  }
+  CHECK(tinted);
 }
 
 TEST_CASE("mesh_live culls borders against provided neighbours", "[mesher]") {

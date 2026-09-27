@@ -21,6 +21,7 @@ class ChunkManager {
   std::vector<BiomeId> coarse_biomes(int x, int z, int w, int h) const;
   // Temperatures in 0..1 (like getTemperatures: min(raw, 65536) / 65536).
   std::vector<float> temperatures(int x, int z, int w, int h) const;
+  std::vector<float> rainfalls(int x, int z, int w, int h) const;
 
  private:
   LayerSet layers_;

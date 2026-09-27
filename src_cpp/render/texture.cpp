@@ -45,11 +45,23 @@ void Texture::bind(unsigned unit) const {
 }
 
 bool grass_tint_from_map(const Image& colormap, float& r, float& g, float& b) {
-  if (colormap.width != 256 || colormap.height != 256 || colormap.rgba.size() < 256 * 256 * 4) {
+  return sample_colormap(colormap, 0.5F, 1.0F, r, g, b);
+}
+
+bool sample_colormap(const Image& colormap, float temp, float humidity, float& r, float& g,
+                     float& b) {
+  if (colormap.width != 256 || colormap.height != 256 ||
+      colormap.rgba.size() < 256 * 256 * 4) {
     return false;
   }
-  // ColorizerGrass.getGrassColor(0.5, 1.0): x=(1-0.5)*255=127, y=(1-0.25... (1-0.5)*255=127.
-  const std::size_t i = static_cast<std::size_t>((127 * 256 + 127) * 4);
+  float h = humidity * temp;
+  int ix = static_cast<int>((1.0F - temp) * 255.0F);
+  int iy = static_cast<int>((1.0F - h) * 255.0F);
+  if (ix < 0) ix = 0;
+  if (ix > 255) ix = 255;
+  if (iy < 0) iy = 0;
+  if (iy > 255) iy = 255;
+  const std::size_t i = static_cast<std::size_t>((iy * 256 + ix) * 4);
   r = colormap.rgba[i] / 255.0F;
   g = colormap.rgba[i + 1] / 255.0F;
   b = colormap.rgba[i + 2] / 255.0F;

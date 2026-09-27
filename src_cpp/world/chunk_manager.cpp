@@ -30,4 +30,16 @@ std::vector<float> ChunkManager::temperatures(int x, int z, int w, int h) const 
   return out;
 }
 
+std::vector<float> ChunkManager::rainfalls(int x, int z, int w, int h) const {
+  const std::vector<std::int32_t> raw = layers_.rainfall->generate(x, z, w, h);
+  std::vector<float> out;
+  out.reserve(raw.size());
+  for (std::int32_t v : raw) {
+    float f = static_cast<float>(v) / 65536.0F;
+    if (f > 1.0F) f = 1.0F;
+    out.push_back(f);
+  }
+  return out;
+}
+
 }  // namespace craftpp::world

@@ -102,20 +102,17 @@ TEST_CASE("flat chunk exposes only its shell", "[mesher]") {
 TEST_CASE("grass tint applies to top and sides only", "[mesher]") {
   Chunk chunk;
   chunk.set(0, 1, 0, BlockId::Grass);  // y=1: bottom culled by nothing? air below -> visible
-  Mesher mesher;
-  mesher.tint_r = 0.5F;
-  mesher.tint_g = 0.8F;
-  mesher.tint_b = 0.25F;
+  Mesher mesher;                       // M2 path: flat plains tint
   const Mesh m = mesher.mesh_chunk(chunk);
   REQUIRE(m.vertices.size() == 24);
   // Quad 0 = bottom: untinted dirt tile shade 0.5.
   CHECK(m.vertices[0].r == 0.5F);
-  // Quad 1 = top: shade 1.0 * tint.
-  CHECK(m.vertices[4].r == 0.5F);
-  CHECK(m.vertices[4].g == 0.8F);
-  CHECK(m.vertices[4].b == 0.25F);
+  // Quad 1 = top: shade 1.0 * plains tint.
+  CHECK_THAT(m.vertices[4].r, Catch::Matchers::WithinAbs(0.486F, 1e-3));
+  CHECK_THAT(m.vertices[4].g, Catch::Matchers::WithinAbs(0.741F, 1e-3));
+  CHECK_THAT(m.vertices[4].b, Catch::Matchers::WithinAbs(0.349F, 1e-3));
   // Quad 2 = side: shade 0.8 * tint.
-  CHECK_THAT(m.vertices[8].r, Catch::Matchers::WithinAbs(0.4F, 1e-6));
+  CHECK_THAT(m.vertices[8].r, Catch::Matchers::WithinAbs(0.8F * 0.486F, 1e-3));
   // Grass top uses tile 0, bottom uses dirt tile 2.
   CHECK_THAT(m.vertices[4].u, Catch::Matchers::WithinAbs((16.0F - 0.01F) / 256.0F, 1e-6));
 }

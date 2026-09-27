@@ -298,31 +298,16 @@ int main(int argc, char** argv) {
     return 1;
   }
   craftpp::render::Mesher mesher;
-  {
-    craftpp::render::Image grass_map;
-    if (craftpp::render::load_png((args.assets + "/misc/grasscolor.png").c_str(), grass_map,
-                                  err) &&
-        craftpp::render::grass_tint_from_map(grass_map, mesher.tint_r, mesher.tint_g,
-                                             mesher.tint_b)) {
-      char buf[96];
-      std::snprintf(buf, sizeof(buf), "grass tint: %.3f %.3f %.3f", mesher.tint_r, mesher.tint_g,
-                    mesher.tint_b);
-      craftpp::log_info(buf);
-    } else {
-      mesher.tint_r = 0.486F;
-      mesher.tint_g = 0.741F;
-      mesher.tint_b = 0.349F;
-    }
-    craftpp::render::Image foliage_map;
-    if (craftpp::render::load_png((args.assets + "/misc/foliagecolor.png").c_str(), foliage_map,
-                                  err) &&
-        craftpp::render::grass_tint_from_map(foliage_map, mesher.foliage_r, mesher.foliage_g,
-                                             mesher.foliage_b)) {
-    } else {
-      mesher.foliage_r = 0.282F;
-      mesher.foliage_g = 0.478F;
-      mesher.foliage_b = 0.141F;
-    }
+  craftpp::render::Image grass_map, foliage_map;
+  if (!craftpp::render::load_png((args.assets + "/misc/grasscolor.png").c_str(), grass_map,
+                                 err)) {
+    craftpp::log_error("cannot load grasscolor.png: " + err);
+    return 1;
+  }
+  if (!craftpp::render::load_png((args.assets + "/misc/foliagecolor.png").c_str(), foliage_map,
+                                 err)) {
+    craftpp::log_error("cannot load foliagecolor.png: " + err);
+    return 1;
   }
   auto lang = craftpp::gui::load_lang(args.assets + "/lang/en_US.lang");
   craftpp::gui::ScreenCtx sctx;
@@ -452,6 +437,15 @@ int main(int argc, char** argv) {
       session->save_dir = save_dir;
       session->world = std::make_unique<LiveWorld>(info.has_value() ? info->seed : seed);
       LiveWorld& world = *session->world;
+      // Per-column biome tints (ColorizerGrass/ColorizerFoliage).
+      mesher.tint = [&](int x, int z, bool foliage, float& r, float& g, float& b) {
+        const float t = world.temperature(x, z);
+        const float h = world.rainfall(x, z);
+        if (!craftpp::render::sample_colormap(foliage ? foliage_map : grass_map, t, h, r, g,
+                                              b)) {
+          r = g = b = 1.0F;
+        }
+      };
       if (info.has_value()) {
         world.load(save_dir);
         craftpp::log_info("loaded save from " + save_dir);

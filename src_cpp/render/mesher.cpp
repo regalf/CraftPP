@@ -94,9 +94,10 @@ Mesh Mesher::mesh_chunk(const world::Chunk& chunk) const {
             g *= 0.35F;
             b *= 0.85F;
           } else if (def.grass_tinted && f.face != Face::Bottom) {
-            r *= tint_r;
-            g *= tint_g;
-            b *= tint_b;
+            // M2 path keeps the flat plains tint (no column lookup here).
+            r *= 0.486F;
+            g *= 0.741F;
+            b *= 0.349F;
           }
 
           const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
@@ -179,17 +180,25 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
           float u0, u1, v0, v1;
           tile_uv(tile, u0, u1, v0, v1);
           const float b = brightness(x, y, z);
+          float tr = b, tg = b, tb = b;
+          if (id == 31) {
+            // Tall grass uses the biome grass color (colorMultiplier).
+            tint(x, z, false, tr, tg, tb);
+            tr *= b;
+            tg *= b;
+            tb *= b;
+          }
           const float xa = x + 0.05F, xb = x + 0.95F;
           const float za = z + 0.05F, zb = z + 0.95F;
           const float y0 = y, y1 = y + 1;
           emit_quad_uv(xa, y1, za, u0, v0, xa, y0, za, u0, v1, xb, y0, zb, u1, v1, xb, y1, zb,
-                       u1, v0, b, b, b);
+                       u1, v0, tr, tg, tb);
           emit_quad_uv(xb, y1, zb, u0, v0, xb, y0, zb, u0, v1, xa, y0, za, u1, v1, xa, y1, za,
-                       u1, v0, b, b, b);
+                       u1, v0, tr, tg, tb);
           emit_quad_uv(xa, y1, zb, u0, v0, xa, y0, zb, u0, v1, xb, y0, za, u1, v1, xb, y1, za,
-                       u1, v0, b, b, b);
+                       u1, v0, tr, tg, tb);
           emit_quad_uv(xb, y1, za, u0, v0, xb, y0, za, u0, v1, xa, y0, zb, u1, v1, xa, y1, zb,
-                       u1, v0, b, b, b);
+                       u1, v0, tr, tg, tb);
           continue;
         }
         const bool leaves = (id == 18);
@@ -224,13 +233,29 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
             g *= 0.35F;
             bl *= 0.85F;
           } else if (id == 2 && side != 0) {
-            r *= tint_r;
-            g *= tint_g;
-            bl *= tint_b;
+            float tr = 1, tg = 1, tb = 1;
+            tint(x, z, false, tr, tg, tb);
+            r *= tr;
+            g *= tg;
+            bl *= tb;
           } else if (id == 18) {
-            r *= foliage_r;
-            g *= foliage_g;
-            bl *= foliage_b;
+            if ((meta & 3) == 1) {
+              // Pine (ColorizerFoliage.getFoliageColorPine = 6396257).
+              r *= 0x61 / 255.0F;
+              g *= 0x99 / 255.0F;
+              bl *= 0x41 / 255.0F;
+            } else if ((meta & 3) == 2) {
+              // Birch (getFoliageColorBirch = 8431445).
+              r *= 0x80 / 255.0F;
+              g *= 0xA7 / 255.0F;
+              bl *= 0x25 / 255.0F;
+            } else {
+              float tr = 1, tg = 1, tb = 1;
+              tint(x, z, true, tr, tg, tb);
+              r *= tr;
+              g *= tg;
+              bl *= tb;
+            }
           }
           emit_face(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), f, r, g,
                     bl, tile);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 #include "render/mesh.hpp"
 #include "world/chunk.hpp"
 #include "world/region.hpp"
@@ -15,15 +17,21 @@ namespace craftpp::render {
 // A face is emitted only when the neighbour is non-opaque
 // (mirrors shouldSideBeRendered for opaque cubes).
 struct Mesher {
-  // RGB tint multiplied on grass top/side faces (biome color from
-  // ColorizerGrass; loader in app samples grasscolor.png, default plains).
-  float tint_r = 1.0F;
-  float tint_g = 1.0F;
-  float tint_b = 1.0F;
-  // Foliage tint for leaves (ColorizerFoliage; default sampled likewise).
-  float foliage_r = 1.0F;
-  float foliage_g = 1.0F;
-  float foliage_b = 1.0F;
+  // Per-column biome tint (ColorizerGrass/ColorizerFoliage): grass for
+  // block 2 + tall grass, foliage for leaves. Defaults to the plains
+  // sample; the app installs the colormap lookup.
+  std::function<void(int x, int z, bool foliage, float& r, float& g, float& b)> tint =
+      [](int, int, bool foliage, float& r, float& g, float& b) {
+        if (foliage) {
+          r = 0.282F;
+          g = 0.478F;
+          b = 0.141F;
+        } else {
+          r = 0.486F;
+          g = 0.741F;
+          b = 0.349F;
+        }
+      };
 
   Mesh mesh_chunk(const world::Chunk& chunk) const;
 

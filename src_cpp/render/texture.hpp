@@ -35,5 +35,10 @@ class Texture {
 // Samples a 256x256 color map the way ColorizerGrass does:
 // getGrassColor(0.5, 1.0) -> index (127 << 8) | 127. Returns rgb in 0..1.
 bool grass_tint_from_map(const Image& colormap, float& r, float& g, float& b);
+// Per-column Colorizer lookup (func_40254_a/func_40255_b): humidity is
+// scaled by temperature first, then both index the map (truncated, like
+// the (int) casts in getGrassColor/getFoliageColor).
+bool sample_colormap(const Image& colormap, float temp, float humidity, float& r, float& g,
+                     float& b);
 
 }  // namespace craftpp::render
