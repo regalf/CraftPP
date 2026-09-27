@@ -39,6 +39,27 @@ TEST_CASE("mesh_live emits textured top faces with grass tile", "[mesher]") {
   CHECK(found_grass_top);
 }
 
+TEST_CASE("grass sides render dirt plus tinted overlay", "[mesher]") {
+  craftpp::render::Mesher m;
+  auto w = flat_world();
+  const auto mesh = m.mesh_live(w, 0, 0);
+  // Side faces of the grass layer (y=64, x or z on a border): tile 3
+  // (u 0.1875..0.25) untinted dirt + tile 38 overlay (u 0.375..0.4375).
+  bool dirt_side = false, overlay = false;
+  for (const auto& v : mesh.vertices) {
+    if (v.y >= 64.0F && v.y <= 65.0F && (v.x == 0.0F || v.x == 16.0F)) {
+      if (v.u >= 0.1875F && v.u < 0.25F) {
+        dirt_side = true;
+        // Dirt part carries no green tint (r==g==b brightness).
+        CHECK(v.r == Catch::Approx(v.g));
+      }
+      if (v.u >= 0.375F && v.u < 0.4375F) overlay = true;
+    }
+  }
+  CHECK(dirt_side);
+  CHECK(overlay);
+}
+
 TEST_CASE("mesh_live tints tall grass with the biome callback", "[mesher]") {
   craftpp::render::Mesher m;
   m.tint = [](int, int, bool foliage, float& r, float& g, float& b) {

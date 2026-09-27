@@ -232,12 +232,27 @@ Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
             r *= 0.15F;
             g *= 0.35F;
             bl *= 0.85F;
-          } else if (id == 2 && side != 0) {
-            float tr = 1, tg = 1, tb = 1;
-            tint(x, z, false, tr, tg, tb);
-            r *= tr;
-            g *= tg;
-            bl *= tb;
+          } else if (id == 2) {
+            if (side == 1) {
+              // Top: grayscale tile tinted with the biome color.
+              float tr = 1, tg = 1, tb = 1;
+              tint(x, z, false, tr, tg, tb);
+              emit_face(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), f,
+                        b * tr, b * tg, b * tb, tile);
+            } else if (side == 0) {
+              emit_face(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), f,
+                        b, b, b, tile);
+            } else {
+              // Sides: dirt tile untinted, then the fancy-grass overlay
+              // (tile 38, transparent dirt area) with the biome tint.
+              emit_face(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), f,
+                        b, b, b, tile);
+              float tr = 1, tg = 1, tb = 1;
+              tint(x, z, false, tr, tg, tb);
+              emit_face(static_cast<float>(x), static_cast<float>(y), static_cast<float>(z), f,
+                        b * tr, b * tg, b * tb, 38);
+            }
+            continue;  // grass emits its own faces above
           } else if (id == 18) {
             if ((meta & 3) == 1) {
               // Pine (ColorizerFoliage.getFoliageColorPine = 6396257).

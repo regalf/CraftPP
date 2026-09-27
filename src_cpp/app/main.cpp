@@ -1079,6 +1079,7 @@ int main(int argc, char** argv) {
         LiveWorld& world = *game->world;
         PlayerSP& player = *game->player;
         glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LEQUAL);  // vanilla: coplanar overlays (grass lip) tie-win
         glEnable(GL_CULL_FACE);
         glCullFace(GL_BACK);
         const float yr = game->yaw * 3.14159265f / 180.0f;
