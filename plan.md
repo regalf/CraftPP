@@ -155,8 +155,10 @@ fly double-tap, TPS meter, auto-respawn).
 6. **Mechanics leftovers** — food/stews/buckets/bow, full armor,
    durability, redstone/rails, TNT, sleep/XP/riding/achievements,
    enchanting, silverfish/ice. PARTIAL: live fluids done (flow/harden/
-   scheduling), entity pickup bbox, drops no-push gate, harvest-before-
-   removal, placement entity check.
+   scheduling), shape blocks done (slab half-boxes, snow layer heights,
+   ladder/vine wall quads, precise shape picking, fluid-skip), entity
+   pickup bbox, drops no-push gate, harvest-before-removal, placement
+   entity check.
 
 Known debts: demo SIGSEGV masked by respawn (not root-caused, see
 known-issues); zombie feel pending real paths (interpolation done).
