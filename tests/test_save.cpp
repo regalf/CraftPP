@@ -216,6 +216,13 @@ TEST_CASE("entities, tiles, tileticks and player survive save/load", "[save]") {
   CHECK(lz->pos_x == Catch::Approx(5.5));
   CHECK(lz->pos_y == Catch::Approx(68.0));
   CHECK(lz->pos_z == Catch::Approx(-2.5));
+  // Loaded mobs tick (regression: adopt_mob must register for on_update,
+  // or reloaded monsters freeze).
+  {
+    const int t0 = lz->ticks_existed;
+    for (int i = 0; i < 5; ++i) l.tick();
+    CHECK(lz->ticks_existed == t0 + 5);
+  }
   // Scheduled tick persisted with relative delay (save time 0 + 30).
   REQUIRE(l.scheduled_ticks().size() == 1);
   CHECK(l.scheduled_ticks()[0].x == 1);
@@ -236,7 +243,8 @@ TEST_CASE("entities, tiles, tileticks and player survive save/load", "[save]") {
   CHECK(p2.pos_y == Catch::Approx(70.0));
   // Physics box synced (stale bbox used to drop loaded players in the void).
   CHECK(p2.bbox.min_y == Catch::Approx(70.0 - 1.62).margin(0.01));
-  CHECK(lz->bbox.min_y == Catch::Approx(68.0).margin(0.01));
+  // Mob pos_y is feet (no +1.62 like the player): box follows pos.
+  CHECK(lz->bbox.min_y == Catch::Approx(lz->pos_y).margin(0.01));
   CHECK(info->player->compound->find("Pos")->list->items[1].f64 ==
         Catch::Approx(70.0));
   CHECK(p2.rotation_yaw == Catch::Approx(45.0f));

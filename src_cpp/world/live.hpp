@@ -99,7 +99,10 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   std::vector<const tile::TileEntity*> tile_entities() const;
   const std::vector<tick::ScheduledTick>& scheduled_ticks() const { return sched_; }
   void adopt_item(std::unique_ptr<entity::DroppedItem> e) { items_.push_back(std::move(e)); }
-  void adopt_mob(std::unique_ptr<entity::Living> e) { mobs_.push_back(std::move(e)); }
+  void adopt_mob(std::unique_ptr<entity::Living> e) {
+    entities_.push_back(e.get());  // ticks run over entities_, like spawning does
+    mobs_.push_back(std::move(e));
+  }
   void set_tile(std::unique_ptr<tile::TileEntity> t);
   void schedule_loaded_tick(int x, int y, int z, int id, int delay) {
     tick::schedule_tick(sched_, time_, x, y, z, id, delay);
