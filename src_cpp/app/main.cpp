@@ -588,7 +588,15 @@ int main(int argc, char** argv) {
         ui.loading_progress = (done + 1) * 100 / total;
         return !game->load_pop.empty();
       }
-      game->load_phase = 2;
+      game->      load_phase = 2;
+      // Mesh every provided chunk (loaded saves skip populate entirely,
+      // so their meshes would otherwise never be built).
+      for (const auto& [cx, cz] : world.provided_chunks()) {
+        if (game->tess_map.count({cx, cz}) != 0) continue;
+        game->refill_tint(cx, cz);
+        game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
+        world.clear_dirty(cx, cz);
+      }
       craftpp::gui::open_screen(ui, craftpp::gui::Screen::None, sctx);
       set_screen_cursor();
       craftpp::log_info(
