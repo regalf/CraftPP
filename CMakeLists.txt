@@ -59,6 +59,9 @@ add_library(craftpp_core
   src_cpp/gui/crafting.cpp
   src_cpp/gui/font.cpp
   src_cpp/gui/hud.cpp
+  src_cpp/gui/lang.cpp
+  src_cpp/gui/screens.cpp
+  src_cpp/gui/widgets.cpp
 )
 target_include_directories(craftpp_core PUBLIC src_cpp third_party ${EPOXY_INCLUDE_DIRS})
 target_link_libraries(craftpp_core PUBLIC ZLIB::ZLIB glm::glm ${EPOXY_LIBRARIES})
@@ -105,6 +108,7 @@ add_executable(craftpp_tests
   tests/test_model.cpp
   tests/test_font.cpp
   tests/test_hud.cpp
+  tests/test_screens.cpp
 )
 target_link_libraries(craftpp_tests PRIVATE craftpp_core Catch2::Catch2WithMain)
 catch_discover_tests(craftpp_tests)

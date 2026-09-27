@@ -224,7 +224,7 @@ nbt::Tag level_dat_tag(const WorldInfoData& info) {
   data.set("raining", nbt::Tag::make_byte(0));
   data.set("thunderTime", nbt::Tag::make_int(0));
   data.set("thundering", nbt::Tag::make_byte(0));
-  data.set("hardcore", nbt::Tag::make_byte(0));
+  data.set("hardcore", nbt::Tag::make_byte(info.hardcore ? 1 : 0));
   if (info.player.has_value()) data.set("Player", *info.player);
   nbt::TagCompound root;
   root.set("Data", nbt::Tag::make_compound(std::move(data)));
@@ -245,6 +245,7 @@ WorldInfoData world_info_from_tag(const nbt::Tag& root) {
   info.time = need(c, "Time").i64;
   info.level_name = need(c, "LevelName").str;
   info.version = need(c, "version").i32;
+  if (const nbt::Tag* hc = c.find("hardcore"); hc != nullptr) info.hardcore = hc->i8 != 0;
   if (const nbt::Tag* p = c.find("Player"); p != nullptr) info.player = *p;
   return info;
 }
@@ -607,6 +608,8 @@ void LiveWorld::save(const std::string& save_dir, const entity::Player* player) 
   regions.clear();
   WorldInfoData info;
   info.seed = seed_;
+  info.game_type = game_type_;
+  info.hardcore = hardcore_;
   info.spawn_x = static_cast<int>(spawn_x_);
   info.spawn_y = static_cast<int>(spawn_y_);
   info.spawn_z = static_cast<int>(spawn_z_);
@@ -624,6 +627,8 @@ bool LiveWorld::load(const std::string& save_dir) {
   spawn_z_ = info->spawn_z;
   time_ = info->time;
   level_name_ = info->level_name;
+  game_type_ = info->game_type;
+  hardcore_ = info->hardcore;
   // Walk region files present on disk.
   const std::string rdir = save_dir + "/region";
   std::error_code ec;

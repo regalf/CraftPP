@@ -114,6 +114,10 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   void set_level_name(std::string name) { level_name_ = std::move(name); }
   const std::string& level_name() const { return level_name_; }
   void set_world_time(std::int64_t t) { time_ = t; }
+  void set_game_type(int t) { game_type_ = t; }
+  int game_type() const { return game_type_; }
+  void set_hardcore(bool h) { hardcore_ = h; }
+  bool hardcore() const { return hardcore_; }
   std::vector<std::int8_t> chunk_ids(int cx, int cz) const { return region_.chunk_bytes(cx, cz); }
   std::vector<std::uint8_t> chunk_metadata(int cx, int cz) const {
     return region_.chunk_meta(cx, cz);
@@ -188,6 +192,8 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   std::vector<std::unique_ptr<entity::Living>> mobs_;
   double spawn_x_ = 0.0, spawn_y_ = 64.0, spawn_z_ = 0.0;
   std::string level_name_ = "Craft++";
+  int game_type_ = 0;  // 0 survival, 1 creative (level.dat GameType)
+  bool hardcore_ = false;
   bool spawn_hostile_ = true;
   bool spawn_peaceful_ = true;
   std::vector<entity::Entity*> entities_;  // non-owning; app owns the player/mobs

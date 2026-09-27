@@ -18,7 +18,8 @@ class LiveWorld;
 // save version 19132). Player persistence lands with GUI/inventory.
 struct WorldInfoData {
   std::int64_t seed = 0;
-  int game_type = 0;  // survival
+  int game_type = 0;  // 0 survival, 1 creative, 2 adventure (unused here)
+  bool hardcore = false;
   bool map_features = true;
   int spawn_x = 0, spawn_y = 64, spawn_z = 0;
   std::int64_t time = 0;
