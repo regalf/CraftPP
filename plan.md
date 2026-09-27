@@ -155,10 +155,13 @@ fly double-tap, TPS meter, auto-respawn).
 6. **Mechanics leftovers** — food/stews/buckets/bow, full armor,
    durability, redstone/rails, TNT, sleep/XP/riding/achievements,
    enchanting, silverfish/ice. PARTIAL: live fluids done (flow/harden/
-   scheduling), shape blocks done (slab half-boxes, snow layer heights,
-   ladder/vine wall quads, precise shape picking, fluid-skip), entity
-   pickup bbox, drops no-push gate, harvest-before-removal, placement
-   entity check.
+   scheduling), fluid render done (lowered surfaces, flow-rotated UVs,
+   animated TextureFX water/lava/flow, transparent pass, underwater
+   fog+water overlay), shape blocks done (slab half-boxes, snow layer
+   heights, ladder/vine wall quads, precise shape picking, fluid-skip),
+   entity pickup bbox, drops no-push gate, harvest-before-removal,
+   placement entity check. LEFT in fluids: swamp water tint
+   (field_40256_A), vine spread ticks.
 
 Known debts: demo SIGSEGV masked by respawn (not root-caused, see
 known-issues); zombie feel pending real paths (interpolation done).
