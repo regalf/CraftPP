@@ -258,6 +258,13 @@ struct Session {
   std::map<std::pair<int, int>, craftpp::render::Tessellator> tess_map;
   // Climate prefetch for tinting (set by start_game, used by remeshing).
   std::function<void(int, int)> refill_tint = [](int, int) {};
+  // Async world build (loading screen): gen queue then populate queue.
+  std::vector<std::pair<int, int>> load_gen, load_pop;
+  int load_phase = 0;  // 0 gen, 1 spawn+player, 2 populate+mesh
+  std::string pending_name;
+  int pending_mode = 0;
+  bool pending_hardcore = false;
+  std::optional<craftpp::world::WorldInfoData> pending_info;
   // Per-frame input edges.
   double last_x = 0.0, last_y = 0.0;
   bool have_mouse = false;
@@ -440,9 +447,6 @@ int main(int argc, char** argv) {
       session->save_dir = save_dir;
       session->world = std::make_unique<LiveWorld>(info.has_value() ? info->seed : seed);
       LiveWorld& world = *session->world;
-      // Per-column biome tints (ColorizerGrass/ColorizerFoliage). Climate
-      // is prefetched per remesh (chunk + 1 border); the callback only
-      // reads the arrays (per-column GenLayer queries tanked fps).
       struct TintCache {
         int ox = INT_MAX, oz = INT_MAX;
         float t[18][18] = {};
@@ -473,6 +477,7 @@ int main(int argc, char** argv) {
           r = g = b = 1.0F;
         }
       };
+      session->refill_tint = refill_tint;
       if (info.has_value()) {
         world.load(save_dir);
         craftpp::log_info("loaded save from " + save_dir);
@@ -481,68 +486,115 @@ int main(int argc, char** argv) {
         world.set_game_type(mode_idx == 2 ? 1 : 0);
         world.set_hardcore(hardcore);
       }
-      world.provide_area(-1, -1, 1, 1);
-      auto surface_at = [&](int x, int z) {
-        for (int y = 127; y > 0; --y) {
-          const int id = world.block_id(x, y, z);
-          if (id != 0 && id != 9) return y;
+      // Async build (loading screen): gen queue, then populate+mesh queue.
+      session->load_gen.clear();
+      session->load_pop.clear();
+      for (int cz = -1; cz <= 1; ++cz)
+        for (int cx = -1; cx <= 1; ++cx) {
+          if (!world.is_provided(cx, cz)) session->load_gen.emplace_back(cx, cz);
+          if (!world.is_populated(cx, cz)) session->load_pop.emplace_back(cx, cz);
         }
-        return 63;
-      };
-      int sx = 8, sz = 8;
-      for (int ox = -8; ox <= 8; ++ox) {
-        for (int oz = -8; oz <= 8; ++oz) {
-          const int h0 = surface_at(8 + ox, 8 + oz);
-          bool flat = true;
-          for (int ax = -1; ax <= 1 && flat; ++ax)
-            for (int az = -1; az <= 1 && flat; ++az)
-              if (surface_at(8 + ox + ax, 8 + oz + az) != h0) flat = false;
-          if (flat) {
-            sx = 8 + ox;
-            sz = 8 + oz;
-            ox = 9;
-            break;
+      session->load_phase = 0;
+      session->pending_name = level_name;
+      session->pending_mode = mode_idx;
+      session->pending_hardcore = hardcore;
+      session->pending_info = info;
+      game = std::move(session);
+      ui.loading_title =
+          info.has_value() ? "Loading level" : "Generating level";  // (lang has no key)
+      ui.loading_sub = "Building terrain";
+      ui.loading_progress = game->load_gen.empty() && game->load_pop.empty() ? 100 : 0;
+      craftpp::gui::open_screen(ui, craftpp::gui::Screen::Loading, sctx);
+      set_screen_cursor();
+    };
+
+    // One loading step per frame (gen, then spawn+populate+mesh). Returns
+    // true while work remains.
+    std::function<bool()> pump_loading;
+    pump_loading = [&]() {
+      if (!game) return false;
+      LiveWorld& world = *game->world;
+      const int total = 9 + 9;
+      const int done = (9 - (int)game->load_gen.size()) + (9 - (int)game->load_pop.size());
+      if (!game->load_gen.empty()) {
+        auto [cx, cz] = game->load_gen.back();
+        game->load_gen.pop_back();
+        world.gen_chunk(cx, cz);
+        ui.loading_progress = (done + 1) * 100 / total;
+        return true;
+      }
+      if (game->load_phase == 0) {
+        // Spawn search + player + controllers (needs finished terrain).
+        game->load_phase = 1;
+        auto surface_at = [&](int x, int z) {
+          for (int y = 127; y > 0; --y) {
+            const int id = world.block_id(x, y, z);
+            if (id != 0 && id != 9) return y;
+          }
+          return 63;
+        };
+        int sx = 8, sz = 8;
+        for (int ox = -8; ox <= 8; ++ox) {
+          for (int oz = -8; oz <= 8; ++oz) {
+            const int h0 = surface_at(8 + ox, 8 + oz);
+            bool flat = true;
+            for (int ax = -1; ax <= 1 && flat; ++ax)
+              for (int az = -1; az <= 1 && flat; ++az)
+                if (surface_at(8 + ox + ax, 8 + oz + az) != h0) flat = false;
+            if (flat) {
+              sx = 8 + ox;
+              sz = 8 + oz;
+              ox = 9;
+              break;
+            }
           }
         }
-      }
-      session->sx = sx;
-      session->sz = sz;
-      session->ground = surface_at(sx, sz);
-      session->player = std::make_unique<PlayerSP>(&world, "Player", 0);
-      PlayerSP& player = *session->player;
-      world.add_entity(&player);
-      bool restored = false;
-      if (info.has_value() && info->player.has_value()) {
-        craftpp::world::apply_player_tag(player, *info->player);
-        restored = true;
-      }
-      if (!restored) {
-        world.set_spawn_point(sx + 0.5, session->ground, sz + 0.5);
-        player.set_position_and_rotation(sx + 0.5, session->ground + 12.0 + 1.62, sz + 0.5, 0.0f,
-                                        0.0f);
-      }
-      session->csp = std::make_unique<ControllerSP>(world, player);
-      session->ccr = std::make_unique<ControllerCreative>(world, player);
-      session->controller = session->csp.get();
-      session->creative = (mode_idx == 2) || (info.has_value() && info->game_type == 1);
-      if (session->creative) {
-        ControllerCreative::enable_creative(player);
-        session->controller = session->ccr.get();
-      }
-      apply_difficulty();
-      for (int cx = -1; cx <= 1; ++cx)
-        for (int cz = -1; cz <= 1; ++cz) {
-          refill_tint(cx, cz);
-          session->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
-          world.clear_dirty(cx, cz);
+        game->sx = sx;
+        game->sz = sz;
+        game->ground = surface_at(sx, sz);
+        game->player = std::make_unique<PlayerSP>(&world, "Player", 0);
+        PlayerSP& player = *game->player;
+        world.add_entity(&player);
+        bool restored = false;
+        if (game->pending_info.has_value() && game->pending_info->player.has_value()) {
+          craftpp::world::apply_player_tag(player, *game->pending_info->player);
+          restored = true;
         }
-      session->refill_tint = refill_tint;
-      game = std::move(session);
+        if (!restored) {
+          world.set_spawn_point(sx + 0.5, game->ground, sz + 0.5);
+          player.set_position_and_rotation(sx + 0.5, game->ground + 12.0 + 1.62, sz + 0.5, 0.0f,
+                                          0.0f);
+        }
+        game->csp = std::make_unique<ControllerSP>(world, player);
+        game->ccr = std::make_unique<ControllerCreative>(world, player);
+        game->controller = game->csp.get();
+        game->creative = (game->pending_mode == 2) ||
+                         (game->pending_info.has_value() && game->pending_info->game_type == 1);
+        if (game->creative) {
+          ControllerCreative::enable_creative(player);
+          game->controller = game->ccr.get();
+        }
+        apply_difficulty();
+        ui.loading_progress = done * 100 / total;
+        return true;
+      }
+      if (!game->load_pop.empty()) {
+        auto [cx, cz] = game->load_pop.back();
+        game->load_pop.pop_back();
+        world.populate_one(cx, cz);
+        game->refill_tint(cx, cz);
+        game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
+        world.clear_dirty(cx, cz);
+        ui.loading_progress = (done + 1) * 100 / total;
+        return !game->load_pop.empty();
+      }
+      game->load_phase = 2;
       craftpp::gui::open_screen(ui, craftpp::gui::Screen::None, sctx);
       set_screen_cursor();
       craftpp::log_info(
           "controls: WASD move, mouse look, Space jump, Shift sneak, LMB mine, "
           "RMB place held, 1-9 hotbar + wheel, G creative, ESC menu");
+      return false;
     };
 
     stop_to_title = [&](bool save) {
@@ -768,6 +820,15 @@ int main(int argc, char** argv) {
       const bool lmb = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 
       if (ui.cur != craftpp::gui::Screen::None) {
+        // Loading screen pumps the async world build (one chunk/frame).
+        if (ui.cur == craftpp::gui::Screen::Loading) {
+          pump_loading();
+          lmb_down = lmb;
+          g_chars.clear();
+          g_backspace = false;
+          g_enter = false;
+          g_wheel = 0;
+        } else {
         // Title/menu branch (game world frozen behind Ingame).
         // Slider drag.
         if (lmb && !lmb_down) {
@@ -851,12 +912,14 @@ int main(int argc, char** argv) {
           if (ui.cur == S::Rename) press_button(1);
           if (ui.cur == S::Placeholder) press_button(0);
         }
+        }  // end non-loading menu branch
         if (game) game->esc_was = esc;
         g_chars.clear();
         g_backspace = false;
         g_enter = false;
         g_wheel = 0;
-      } else if (game) {
+      }  // end menu branch
+      if (game && ui.cur == craftpp::gui::Screen::None) {
         // ---- live game branch (existing client logic) ----
         LiveWorld& world = *game->world;
         PlayerSP& player = *game->player;
@@ -1004,7 +1067,7 @@ int main(int argc, char** argv) {
       glClearColor(0.74F * daylight, 0.84F * daylight, 1.0F * daylight, 1.0F);
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-      if (game) {
+      if (game && game->player) {
         LiveWorld& world = *game->world;
         PlayerSP& player = *game->player;
         glEnable(GL_DEPTH_TEST);

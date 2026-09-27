@@ -27,6 +27,7 @@ enum class Screen {
   Confirm,
   Rename,
   Placeholder,
+  Loading,
 };
 
 struct TextField {
@@ -76,6 +77,10 @@ struct ScreenUi {
   // GameOver
   int score = 0;
   bool hardcore = false;
+  // Loading (LoadingScreenRenderer port: title + subtitle + 0-100 bar)
+  std::string loading_title;
+  std::string loading_sub;
+  int loading_progress = -1;
   // Placeholder screens
   std::string placeholder_title;
 };

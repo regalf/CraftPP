@@ -10,28 +10,31 @@
 
 namespace craftpp::world {
 
+void LiveWorld::gen_chunk(int cx, int cz) {
+  if (region_.has_chunk(cx, cz)) return;
+  provider_.set_chunk_seed(cx, cz);
+  std::vector<std::int8_t> b;
+  provider_.generate_terrain(cx, cz, b);
+  provider_.replace_biome_blocks(cx, cz, b, manager_.block_biomes(cx * 16, cz * 16, 16, 16));
+  caves_.generate(seed_, cx, cz, b);
+  ravine_.generate(seed_, cx, cz, b);
+  region_.ensure_chunk(cx, cz, b.data());
+  dirty_[{cx, cz}] = true;
+}
+
+void LiveWorld::populate_one(int cx, int cz) {
+  if (populated_.count({cx, cz}) != 0) return;
+  populate_chunk(region_, manager_, seed_, cx, cz, wrand_);
+  populated_[{cx, cz}] = true;
+  dirty_[{cx, cz}] = true;
+}
+
 void LiveWorld::provide_area(int cx0, int cz0, int cx1, int cz1) {
   for (int cz = cz0; cz <= cz1; ++cz) {
-    for (int cx = cx0; cx <= cx1; ++cx) {
-      if (region_.has_chunk(cx, cz)) continue;
-      provider_.set_chunk_seed(cx, cz);
-      std::vector<std::int8_t> b;
-      provider_.generate_terrain(cx, cz, b);
-      provider_.replace_biome_blocks(cx, cz, b,
-                                     manager_.block_biomes(cx * 16, cz * 16, 16, 16));
-      caves_.generate(seed_, cx, cz, b);
-      ravine_.generate(seed_, cx, cz, b);
-      region_.ensure_chunk(cx, cz, b.data());
-      dirty_[{cx, cz}] = true;
-    }
+    for (int cx = cx0; cx <= cx1; ++cx) gen_chunk(cx, cz);
   }
   for (int cz = cz0; cz <= cz1; ++cz) {
-    for (int cx = cx0; cx <= cx1; ++cx) {
-      if (populated_.count({cx, cz}) != 0) continue;
-      populate_chunk(region_, manager_, seed_, cx, cz, wrand_);
-      populated_[{cx, cz}] = true;
-      dirty_[{cx, cz}] = true;
-    }
+    for (int cx = cx0; cx <= cx1; ++cx) populate_one(cx, cz);
   }
 }
 

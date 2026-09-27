@@ -51,6 +51,9 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   // populates each exactly once. Chunks must be provided with enough margin
   // for populate scatter (tests use +3, populate the inner part).
   void provide_area(int cx0, int cz0, int cx1, int cz1);
+  // Stepwise form for the loading screen (same work, chunk by chunk).
+  void gen_chunk(int cx, int cz);
+  void populate_one(int cx, int cz);
   bool is_provided(int cx, int cz) const { return region_.has_chunk(cx, cz); }
   bool is_populated(int cx, int cz) const { return populated_.count({cx, cz}) != 0; }
 

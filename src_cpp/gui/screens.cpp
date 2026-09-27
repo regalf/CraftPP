@@ -505,6 +505,19 @@ ScreenMeshes draw_screen(ScreenUi& ui, const ScreenCtx& ctx, const Font& font, i
       buttons();
       break;
     }
+    case Screen::Loading: {
+      draw_background(m.bg, w, h);
+      draw_centered(font, m.shadow, m.text, ui.loading_title, w / 2.0F, h / 2.0F - 20,
+                    0xFFFFFFFF);
+      draw_centered(font, m.shadow, m.text, ui.loading_sub, w / 2.0F, h / 2.0F + 4,
+                    0xFFFFFFFF);
+      if (ui.loading_progress >= 0) {
+        const float bx = w / 2.0F - 50, by = h / 2.0F + 16;
+        draw_rect(m.flat, bx, by, bx + 100, by + 2, 0xFF808080);
+        draw_rect(m.flat, bx, by, bx + ui.loading_progress, by + 2, 0xFF80FF20);
+      }
+      break;
+    }
     case Screen::None:
       break;
   }
