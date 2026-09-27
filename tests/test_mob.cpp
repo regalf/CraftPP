@@ -1,4 +1,5 @@
 // Mobs: pig/zombie spawn validity, zombie daylight burn, drops, spawning.
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "entity/controller.hpp"
 #include "entity/pig.hpp"
@@ -224,4 +225,21 @@ TEST_CASE("placement inside entities is refused (checkNoEntityCollision)", "[mob
   CHECK(world::edit::use_block_item(w, w.collider(), p, stack, 4, 0, 10, 65, 8, 4));
   CHECK(w.block_id(9, 65, 8) == 4);
   CHECK(stack == 63);
+}
+
+TEST_CASE("drops never push the player (canBePushed gate)", "[mob]") {
+  auto w = flat_world();
+  entity::PlayerSP p(&w, "t", 0);
+  p.set_position_and_rotation(8.5, 66.62, 8.5, 0.0f, 0.0f);
+  w.add_entity(&p);
+  w.on_item_drop(4, 1, 0, 8.5, 65.2, 8.5, 0, 0, 0);  // cobble at the feet
+  REQUIRE(!w.items().empty());
+  w.items()[0]->pickup_delay = 100;  // stay, don't get picked up
+  p.motion_x = p.motion_z = 0.0;
+  for (int i = 0; i < 20; ++i) w.tick();
+  // Unmoved by the drop (a push would drift motion/position).
+  CHECK(p.motion_x == 0.0);
+  CHECK(p.motion_z == 0.0);
+  CHECK(p.pos_x == Catch::Approx(8.5));
+  CHECK(p.pos_z == Catch::Approx(8.5));
 }

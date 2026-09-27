@@ -138,6 +138,7 @@ class Entity {
   bool is_offset_in_liquid(double dx, double dy, double dz);
   bool is_inside_of_material_water() const;  // isInsideOfMaterial(water)
   virtual float eye_height() const { return 0.0f; }
+  virtual bool can_be_pushed() const { return false; }  // Entity base: no push
   virtual bool can_trigger_walking() const { return true; }
   virtual void fall(float distance) {}
   // Mirrors Entity.attackEntityFrom (base: just sets beenAttacked). Living

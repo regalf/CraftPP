@@ -69,6 +69,7 @@ class Living : public Entity {
     if (v > max_health()) v = max_health();  // source quirk: clamped local is discarded
   }
   bool is_entity_alive() const { return !is_dead && health > 0; }
+  bool can_be_pushed() const override { return !is_dead; }  // living push each other
   bool is_on_ladder() const;
   void set_position_and_rotation2(double x, double y, double z, float yaw, float pitch, int steps);
 

@@ -420,7 +420,7 @@ void Living::on_living_update() {
   land_movement_factor = saved_factor;
   // Entity push section: shove neighbors apart (needs live entity queries).
   for (Entity* other : world->entities_excluding(*this, bbox.expand(0.2, 0.0, 0.2))) {
-    if (other != nullptr) other->apply_entity_collision(*this);
+    if (other != nullptr && other->can_be_pushed()) other->apply_entity_collision(*this);
   }
 }
 
