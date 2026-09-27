@@ -8,6 +8,7 @@
 #include "core/random.hpp"
 #include "world/block_place.hpp"
 #include "world/blocks.hpp"
+#include "world/fluid.hpp"
 
 namespace craftpp::world::tick {
 
@@ -360,8 +361,13 @@ void update_tick(edit::EditWorld& w, std::vector<ScheduledTick>& sched, std::int
     case kFire:
       fire_tick(w, sched, now, rand, x, y, z);
       break;
+    case kWaterMoving:
+    case kLavaMoving:
+    case kLavaStill:
+      LiveFluid(w, sched, now, rand).update_tick(id, x, y, z);
+      break;
     default:
-      break;  // crops/cactus/farmland/fluids handled elsewhere or deferred
+      break;  // crops/cactus/farmland handled elsewhere or deferred
   }
 }
 

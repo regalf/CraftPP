@@ -65,6 +65,15 @@ struct EditWorld : public craftpp::entity::EntityWorld {
     (void)z;
     return 1.0f;
   }
+  // Queued block update (scheduleBlockUpdate). Test worlds ignore it;
+  // LiveWorld appends to the scheduled-tick queue.
+  virtual void schedule_block_tick(int x, int y, int z, int id, int delay) {
+    (void)x;
+    (void)y;
+    (void)z;
+    (void)id;
+    (void)delay;
+  }
 };
 
 // ---- block tables (transcribed from Block.java + subclasses) ----

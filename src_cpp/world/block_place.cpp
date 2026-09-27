@@ -2,6 +2,7 @@
 
 #include "core/math_helper.hpp"
 #include "world/blocks.hpp"
+#include "world/fluid.hpp"
 
 namespace craftpp::world::edit {
 namespace {
@@ -762,6 +763,14 @@ void on_neighbor(EditWorld& w, int id, int x, int y, int z, int from_id) {
            bid::renders_as_normal(w.block_id(ax, ay, az));
   };
   switch (id) {
+    case bid::kWaterMoving:
+    case bid::kLavaMoving:
+    case bid::kWaterStill:
+    case bid::kLavaStill:
+      // BlockFluid/BlockStationary.onNeighborBlockChange: harden, still ->
+      // moving conversion, and re-schedule.
+      LiveFluid::neighbor_changed(w, x, y, z);
+      return;
     case bid::kTorch:
     case bid::kTorchRedIdle:
     case bid::kTorchRedOn: {
@@ -1209,6 +1218,10 @@ bool use_block_item(EditWorld& w, BlockCollider& collider, Breaker& br, int& sta
   if (!be_placed_at(w, collider, item_id, tx, ty, tz, side)) return false;
   // setBlockAndMetadataWithNotify + hooks.
   w.set_raw(tx, ty, tz, item_id, placed_meta(item_id, item_damage));
+  if (item_id == bid::kWaterMoving || item_id == bid::kLavaMoving ||
+      item_id == bid::kWaterStill || item_id == bid::kLavaStill) {
+    LiveFluid::placed(w, tx, ty, tz);  // onBlockAdded: harden + schedule
+  }
   if (!w.editing_blocks) notify_neighbors(w, tx, ty, tz, item_id);
   if (w.block_id(tx, ty, tz) == item_id) {
     on_placed(w, item_id, tx, ty, tz, side);

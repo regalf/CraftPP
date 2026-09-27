@@ -1,6 +1,7 @@
 // Day/night math + random block ticks (grass/leaves/ice/fire).
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include "world/fluid.hpp"
 #include "world/live.hpp"
 #include "world/tick.hpp"
 
@@ -109,4 +110,39 @@ TEST_CASE("fire reschedules itself", "[tick]") {
   tick::update_tick(w, q, w.world_time(), r, bid::kFire, 3, 65, 3);
   CHECK(!q.empty());
   CHECK(q[0].id == bid::kFire);
+}
+
+TEST_CASE("dam break flows water downhill (live fluids)", "[tick]") {
+  auto w = flat_world();
+  // Tank: stone floor at y=64 rim around (8,65,8), water source inside.
+  for (int dx = 6; dx <= 10; ++dx)
+    for (int dz = 6; dz <= 10; ++dz) {
+      if (dx == 6 || dx == 10 || dz == 6 || dz == 10) w.set_raw(dx, 65, dz, bid::kStone, 0);
+    }
+  w.set_raw(8, 65, 8, bid::kWaterMoving, 0);
+  w.schedule_block_tick(8, 65, 8, bid::kWaterMoving, 5);
+  for (int i = 0; i < 40; ++i) w.tick();
+  // Contained source stills (no flow yet: dam holds).
+  CHECK(w.block_id(8, 65, 8) == bid::kWaterStill);
+  // Break the dam with notify (like a real mined block): water escapes.
+  edit::break_to_air(w, 8, 65, 6);
+  for (int i = 0; i < 120; ++i) w.tick();
+  bool escaped = false;
+  for (int dx = 4; dx <= 12 && !escaped; ++dx)
+    for (int dz = 2; dz <= 5 && !escaped; ++dz)
+      for (int dy = 63; dy <= 65 && !escaped; ++dy) {
+        const int id = w.block_id(dx, dy, dz);
+        if (id == bid::kWaterMoving || id == bid::kWaterStill) escaped = true;
+      }
+  CHECK(escaped);
+}
+
+TEST_CASE("lava beside water hardens (live fluids)", "[tick]") {
+  auto w = flat_world();
+  // Placement path (set + onBlockAdded): lava hardens immediately.
+  edit::set_and_notify(w, 8, 65, 9, bid::kWaterStill, 0);
+  edit::set_and_notify(w, 8, 65, 8, bid::kLavaMoving, 2);
+  LiveFluid::placed(w, 8, 65, 8);
+  // Flowing lava (meta 2) + water -> cobblestone.
+  CHECK(w.block_id(8, 65, 8) == bid::kCobble);
 }

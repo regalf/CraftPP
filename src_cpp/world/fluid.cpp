@@ -1,6 +1,6 @@
 #include "world/fluid.hpp"
 
-
+#include "world/block_place.hpp"
 #include "world/blocks.hpp"
 
 namespace craftpp::world {
@@ -376,6 +376,316 @@ void FluidSim::fluid_added(int x, int y, int z) {
 void FluidSim::schedule_sand(int x, int y, int z) {
   if (!immediate_) return;
   sand_try_fall(x, y, z);  // fallInstantly is always true during populate
+}
+
+// ---- live simulation (EditWorld + scheduled ticks) ----
+
+namespace {
+// 0=air 1=water 2=lava 3=other (local copy; fluid.cpp's mat_of is file-local
+// to the worldgen section and must stay untouched).
+int live_mat_of(int id) {
+  if (id == 0) return 0;
+  if (id == bid::kWaterMoving || id == bid::kWaterStill) return 1;
+  if (id == bid::kLavaMoving || id == bid::kLavaStill) return 2;
+  return 3;
+}
+bool live_mat_solid(int id) { return bid::material_solid(id); }
+}  // namespace
+
+int LiveFluid::tick_rate(int id) {
+  const int m = live_mat_of(id);
+  return m == 1 ? 5 : (m == 2 ? 30 : 0);
+}
+
+void LiveFluid::update_tick(int id, int x, int y, int z) {
+  // Dispatch on the CURRENT block like Block.blocksList[id].updateTick.
+  const int cur = w_.block_id(x, y, z);
+  if (cur == bid::kWaterMoving || cur == bid::kLavaMoving) {
+    update_flowing(x, y, z);
+  } else if (cur == bid::kLavaStill) {
+    update_stationary_lava(x, y, z);
+  }
+  (void)id;
+}
+
+void LiveFluid::schedule(int x, int y, int z, int id) {
+  if (id <= 0 || w_.block_id(x, y, z) != id) return;
+  tick::schedule_tick(q_, now_, x, y, z, id, tick_rate(id));
+}
+
+void LiveFluid::update_stationary_lava(int x, int y, int z) {
+  const int tries = r_.next_int(3);
+  int cx = x, cy = y, cz = z;
+  for (int i = 0; i < tries; ++i) {
+    cx += r_.next_int(3) - 1;
+    ++cy;
+    cz += r_.next_int(3) - 1;
+    const int id = w_.block_id(cx, cy, cz);
+    if (id == 0) {
+      if (burnable(w_, cx - 1, cy, cz) || burnable(w_, cx + 1, cy, cz) ||
+          burnable(w_, cx, cy, cz - 1) || burnable(w_, cx, cy, cz + 1) ||
+          burnable(w_, cx, cy - 1, cz) || burnable(w_, cx, cy + 1, cz)) {
+        edit::set_and_notify(w_, cx, cy, cz, bid::kFire, 0);
+        return;
+      }
+    } else if (live_mat_solid(id)) {
+      return;
+    }
+  }
+}
+
+void LiveFluid::update_flowing(int x, int y, int z) {
+  const int id = w_.block_id(x, y, z);
+  const bool water = is_water(id);
+  int decay = flow_decay(x, y, z, water);
+  const int fall_inc = (!water) ? 2 : 1;
+  bool to_still = true;
+  if (decay > 0) {
+    int best = -100;
+    num_sources_ = 0;
+    best = smallest_flow_decay(x - 1, y, z, water, best);
+    best = smallest_flow_decay(x + 1, y, z, water, best);
+    best = smallest_flow_decay(x, y, z - 1, water, best);
+    best = smallest_flow_decay(x, y, z + 1, water, best);
+    int nd = best + fall_inc;
+    if (nd >= 8 || best < 0) nd = -1;
+    if (flow_decay(x, y + 1, z, water) >= 0) {
+      const int up = flow_decay(x, y + 1, z, water);
+      nd = (up >= 8) ? up : up + 8;
+    }
+    if (num_sources_ >= 2 && water) {
+      const int below = w_.block_id(x, y - 1, z);
+      if (live_mat_solid(below)) {
+        nd = 0;
+      } else if (live_mat_of(below) == 1 && w_.block_meta(x, y - 1, z) == 0) {
+        nd = 0;
+      }
+    }
+    if (!water && decay < 8 && nd < 8 && nd > decay && r_.next_int(4) != 0) {
+      nd = decay;
+      to_still = false;
+    }
+    if (nd != decay) {
+      decay = nd;
+      if (nd < 0) {
+        edit::break_to_air(w_, x, y, z);
+      } else {
+        set_meta_only(x, y, z, nd);
+        schedule(x, y, z, id);
+        edit::notify_neighbors(w_, x, y, z, id);
+      }
+    } else if (to_still) {
+      set_silent(x, y, z, id + 1, w_.block_meta(x, y, z));
+      fluid_added(x, y, z);
+    }
+  } else {
+    set_silent(x, y, z, id + 1, w_.block_meta(x, y, z));
+    fluid_added(x, y, z);
+  }
+
+  if (displaceable(x, y - 1, z, water)) {
+    if (!water && live_mat_of(w_.block_id(x, y - 1, z)) == 1) {
+      edit::set_and_notify(w_, x, y - 1, z, bid::kStone, 0);
+      mix_effects(w_);
+      return;
+    }
+    if (decay >= 8) {
+      set_meta_notify(x, y - 1, z, id, decay);
+    } else {
+      set_meta_notify(x, y - 1, z, id, decay + 8);
+    }
+  } else if (decay >= 0 && (decay == 0 || blocks_flow(x, y - 1, z))) {
+    optimal_dirs(x, y, z, water);
+    int nd = decay + fall_inc;
+    if (decay >= 8) nd = 1;
+    if (nd >= 8) return;
+    if (opt_dirs_[0]) flow_into(x - 1, y, z, id, nd);
+    if (opt_dirs_[1]) flow_into(x + 1, y, z, id, nd);
+    if (opt_dirs_[2]) flow_into(x, y, z - 1, id, nd);
+    if (opt_dirs_[3]) flow_into(x, y, z + 1, id, nd);
+  }
+}
+
+void LiveFluid::flow_into(int x, int y, int z, int fluid_id, int meta) {
+  if (!displaceable(x, y, z, is_water(fluid_id))) return;
+  const int old = w_.block_id(x, y, z);
+  if (old > 0 && is_lava(fluid_id)) mix_effects(w_);
+  set_meta_notify(x, y, z, fluid_id, meta);
+}
+
+int LiveFluid::flow_decay(int x, int y, int z, bool water) const {
+  const int id = w_.block_id(x, y, z);
+  const int m = live_mat_of(id);
+  if ((water && m != 1) || (!water && m != 2)) return -1;
+  return w_.block_meta(x, y, z);
+}
+
+int LiveFluid::smallest_flow_decay(int x, int y, int z, bool water, int cur) {
+  const int d = flow_decay(x, y, z, water);
+  if (d < 0) return cur;
+  if (d == 0) ++num_sources_;
+  int e = d >= 8 ? 0 : d;
+  return (cur >= 0 && e >= cur) ? cur : e;
+}
+
+bool LiveFluid::blocks_flow(int x, int y, int z) const {
+  const int id = w_.block_id(x, y, z);
+  if (id == bid::kDoorWood || id == bid::kDoorSteel || id == bid::kSignPost ||
+      id == bid::kLadder || id == bid::kReed) {
+    return true;
+  }
+  if (id == 0) return false;
+  if (id == bid::kPortal) return true;
+  return live_mat_solid(id);
+}
+
+bool LiveFluid::displaceable(int x, int y, int z, bool water) const {
+  const int id = w_.block_id(x, y, z);
+  const int m = live_mat_of(id);
+  if (water ? (m == 1) : (m == 2)) return false;
+  if (m == 2) return false;
+  return !blocks_flow(x, y, z);
+}
+
+int LiveFluid::flow_cost(int x, int y, int z, bool water, int depth, int from_dir) const {
+  int best = 1000;
+  for (int d = 0; d < 4; ++d) {
+    if ((d == 0 && from_dir == 1) || (d == 1 && from_dir == 0) || (d == 2 && from_dir == 3) ||
+        (d == 3 && from_dir == 2)) {
+      continue;
+    }
+    int nx = x, nz = z;
+    if (d == 0) --nx;
+    if (d == 1) ++nx;
+    if (d == 2) --nz;
+    if (d == 3) ++nz;
+    const int nid = w_.block_id(nx, y, nz);
+    const int nm = live_mat_of(nid);
+    const bool same_source =
+        (water ? (nm == 1) : (nm == 2)) && w_.block_meta(nx, y, nz) == 0;
+    if (!blocks_flow(nx, y, nz) && !same_source) {
+      if (!blocks_flow(nx, y - 1, nz)) return depth;
+      if (depth < 4) {
+        const int c = flow_cost(nx, y, nz, water, depth + 1, d);
+        if (c < best) best = c;
+      }
+    }
+  }
+  return best;
+}
+
+void LiveFluid::optimal_dirs(int x, int y, int z, bool water) {
+  for (int d = 0; d < 4; ++d) {
+    flow_cost_[d] = 1000;
+    int nx = x, nz = z;
+    if (d == 0) --nx;
+    if (d == 1) ++nx;
+    if (d == 2) --nz;
+    if (d == 3) ++nz;
+    const int nid = w_.block_id(nx, y, nz);
+    const int nm = live_mat_of(nid);
+    const bool same_source =
+        (water ? (nm == 1) : (nm == 2)) && w_.block_meta(nx, y, nz) == 0;
+    if (!blocks_flow(nx, y, nz) && !same_source) {
+      flow_cost_[d] = !blocks_flow(nx, y - 1, nz) ? 0 : flow_cost(nx, y, nz, water, 1, d);
+    }
+  }
+  int best = flow_cost_[0];
+  for (int d = 1; d < 4; ++d)
+    if (flow_cost_[d] < best) best = flow_cost_[d];
+  for (int d = 0; d < 4; ++d) opt_dirs_[d] = (flow_cost_[d] == best);
+}
+
+bool LiveFluid::set_notify(int x, int y, int z, int id) {
+  if (w_.block_id(x, y, z) == id) return false;
+  w_.set_raw(x, y, z, id, 0);
+  fluid_added(x, y, z);
+  edit::notify_neighbors(w_, x, y, z, id);
+  return true;
+}
+
+bool LiveFluid::set_meta_notify(int x, int y, int z, int id, int m) {
+  const int old = w_.block_id(x, y, z);
+  const int oldm = w_.block_meta(x, y, z);
+  bool changed;
+  if (old == id && oldm == m) {
+    changed = false;
+  } else {
+    w_.set_raw(x, y, z, id, m);
+    fluid_added(x, y, z);
+    changed = true;
+  }
+  if (changed) edit::notify_neighbors(w_, x, y, z, id);
+  return changed;
+}
+
+void LiveFluid::set_meta_only(int x, int y, int z, int m) {
+  if (w_.block_meta(x, y, z) == m) return;
+  edit::set_meta_notify(w_, x, y, z, m);
+}
+
+void LiveFluid::set_silent(int x, int y, int z, int id, int m) {
+  w_.set_raw(x, y, z, id, m);
+}
+
+void LiveFluid::fluid_added(int x, int y, int z) {
+  const int id = w_.block_id(x, y, z);
+  if (!is_fluid(id)) return;
+  check_harden(w_, x, y, z);
+  if (is_moving(id)) schedule(x, y, z, id);
+}
+
+void LiveFluid::neighbor_changed(edit::EditWorld& w, int x, int y, int z) {
+  const int id = w.block_id(x, y, z);
+  if (!is_fluid(id)) return;
+  check_harden(w, x, y, z);
+  if (!is_moving(id)) {
+    // BlockStationary conversion: id-1, same meta, silent, then schedule.
+    w.set_raw(x, y, z, id - 1, w.block_meta(x, y, z));
+    w.schedule_block_tick(x, y, z, id - 1, tick_rate(id - 1));
+  }
+}
+
+void LiveFluid::placed(edit::EditWorld& w, int x, int y, int z) {
+  const int id = w.block_id(x, y, z);
+  if (!is_fluid(id)) return;
+  check_harden(w, x, y, z);
+  if (is_moving(id)) w.schedule_block_tick(x, y, z, id, tick_rate(id));
+}
+
+void LiveFluid::check_harden(edit::EditWorld& w, int x, int y, int z) {
+  const int id = w.block_id(x, y, z);
+  if (!is_lava(id)) return;
+  const bool adj_water = live_mat_of(w.block_id(x, y, z - 1)) == 1 ||
+                         live_mat_of(w.block_id(x, y, z + 1)) == 1 ||
+                         live_mat_of(w.block_id(x - 1, y, z)) == 1 ||
+                         live_mat_of(w.block_id(x + 1, y, z)) == 1 ||
+                         live_mat_of(w.block_id(x, y + 1, z)) == 1;
+  if (!adj_water) return;
+  const int meta = w.block_meta(x, y, z);
+  if (meta == 0) {
+    if (w.block_id(x, y, z) != bid::kObsidian) {
+      w.set_raw(x, y, z, bid::kObsidian, 0);
+      edit::notify_neighbors(w, x, y, z, bid::kObsidian);
+    }
+  } else if (meta <= 4) {
+    if (w.block_id(x, y, z) != bid::kCobble) {
+      w.set_raw(x, y, z, bid::kCobble, 0);
+      edit::notify_neighbors(w, x, y, z, bid::kCobble);
+    }
+  }
+  mix_effects(w);
+}
+
+void LiveFluid::mix_effects(edit::EditWorld& w) {
+  w.world_rand().next_float();
+  w.world_rand().next_float();
+}
+
+bool LiveFluid::burnable(edit::EditWorld& w, int x, int y, int z) {
+  const int id = w.block_id(x, y, z);
+  return id == bid::kLog || id == bid::kWoodPlank || id == bid::kLeaves || id == bid::kWool ||
+         id == bid::kTnt || id == bid::kVine;
 }
 
 }  // namespace craftpp::world

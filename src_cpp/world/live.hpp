@@ -104,6 +104,9 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   void schedule_loaded_tick(int x, int y, int z, int id, int delay) {
     tick::schedule_tick(sched_, time_, x, y, z, id, delay);
   }
+  void schedule_block_tick(int x, int y, int z, int id, int delay) override {
+    tick::schedule_tick(sched_, time_, x, y, z, id, delay);
+  }
   void set_spawn_point(double x, double y, double z) {
     spawn_x_ = x;
     spawn_y_ = y;

@@ -1,8 +1,12 @@
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "core/random.hpp"
 #include "world/blocks.hpp"
 #include "world/region.hpp"
+#include "world/tick.hpp"
 
 namespace craftpp::world {
 
@@ -82,6 +86,63 @@ class FluidSim {
   // members, not locals: nested updateTicks overwrite them, and the outer
   // tick then reads the CLOBBERED values (load-bearing 1.0 quirk: a tick
   // that flows in 2+ directions uses corrupted dirs for the 2nd+ flow).
+  int num_sources_ = 0;
+  int flow_cost_[4] = {1000, 1000, 1000, 1000};
+  bool opt_dirs_[4] = {false, false, false, false};
+};
+
+// Live fluid simulation (BlockFlowing/BlockStationary updateTicks for the
+// tick loop + neighbor/placement hooks). Same algorithms as FluidSim above,
+// operating on EditWorld with real scheduled ticks instead of the
+// worldgen immediate mode.
+class LiveFluid {
+ public:
+  // Scheduled-tick path (owns the shared flow state for the whole cascade,
+  // like the source's BlockFlowing instance fields).
+  LiveFluid(edit::EditWorld& w, std::vector<tick::ScheduledTick>& q, std::int64_t now,
+            JavaRandom& r)
+      : w_(w), q_(q), now_(now), r_(r) {}
+
+  void update_tick(int id, int x, int y, int z);
+
+  // onNeighborBlockChange / onBlockAdded entry points (hook-based: schedule
+  // through EditWorld, RNG from the world stream).
+  static void neighbor_changed(edit::EditWorld& w, int x, int y, int z);
+  static void placed(edit::EditWorld& w, int x, int y, int z);
+  static int tick_rate(int id);
+
+ private:
+  static bool is_water(int id) { return id == bid::kWaterMoving || id == bid::kWaterStill; }
+  static bool is_lava(int id) { return id == bid::kLavaMoving || id == bid::kLavaStill; }
+  static bool is_fluid(int id) { return is_water(id) || is_lava(id); }
+  static bool is_moving(int id) { return id == bid::kWaterMoving || id == bid::kLavaMoving; }
+
+  void schedule(int x, int y, int z, int id);
+  void update_flowing(int x, int y, int z);
+  void update_stationary_lava(int x, int y, int z);
+  // Write primitives (edit:: free functions + notify like the source).
+  bool set_notify(int x, int y, int z, int id);
+  bool set_meta_notify(int x, int y, int z, int id, int m);
+  void set_meta_only(int x, int y, int z, int m);
+  void set_silent(int x, int y, int z, int id, int m);
+  void fluid_added(int x, int y, int z);
+  static void check_harden(edit::EditWorld& w, int x, int y, int z);
+  static void mix_effects(edit::EditWorld& w);
+  static bool burnable(edit::EditWorld& w, int x, int y, int z);
+  // Flow queries.
+  int flow_decay(int x, int y, int z, bool water) const;
+  int smallest_flow_decay(int x, int y, int z, bool water, int cur);
+  bool blocks_flow(int x, int y, int z) const;
+  bool displaceable(int x, int y, int z, bool water) const;
+  void flow_into(int x, int y, int z, int fluid_id, int meta);
+  int flow_cost(int x, int y, int z, bool water, int depth, int from_dir) const;
+  void optimal_dirs(int x, int y, int z, bool water);
+
+  edit::EditWorld& w_;
+  std::vector<tick::ScheduledTick>& q_;
+  std::int64_t now_ = 0;
+  JavaRandom& r_;
+  // Shared mutable flow state (same load-bearing quirk as FluidSim).
   int num_sources_ = 0;
   int flow_cost_[4] = {1000, 1000, 1000, 1000};
   bool opt_dirs_[4] = {false, false, false, false};
