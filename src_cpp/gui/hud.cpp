@@ -66,8 +66,10 @@ void build_item_cube(render::Mesh& m, float sx, float sy, int id, int meta) {
     mxz = std::max(mxz, c.z);
   }
   auto fit = [&](P p) {
+    // Vanilla GUI space has +y pointing DOWN (glOrtho(0,w,h,0)): larger
+    // transformed y sits lower in the slot, no flip.
     const float fx = sx + (p.x - mnx) / (mxx - mnx) * 16.0F;
-    const float fy = sy + 16.0F - (p.y - mny) / (mxy - mny) * 16.0F;
+    const float fy = sy + (p.y - mny) / (mxy - mny) * 16.0F;
     const float fz = (p.z - mnz) / (mxz - mnz) - 0.5F;
     return P{fx, fy, fz};
   };
