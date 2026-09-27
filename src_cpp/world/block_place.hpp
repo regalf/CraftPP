@@ -34,7 +34,7 @@ struct EditWorld : public craftpp::entity::EntityWorld {
   // func_41082_b: opaque && renderAsNormal (chunk-missing default below).
   virtual bool solid_side(int x, int y, int z, bool missing_default) const = 0;
   virtual bool material_solid_at(int x, int y, int z) const = 0;
-  virtual bool entities_prevent_place(const Aabb& box) { return false; }  // M5 mobs
+  virtual bool entities_prevent_place(const Aabb& box) const { return false; }
   virtual void on_item_drop(int item_id, int count, int damage, double px, double py, double pz,
                             double mx, double my, double mz) {}
   virtual void play_aux_sfx(int id, int x, int y, int z, int data) {}

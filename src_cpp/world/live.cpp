@@ -349,6 +349,19 @@ bool LiveWorld::chunks_exist(int x0, int y0, int z0, int x1, int y1, int z1) con
   return true;
 }
 
+bool LiveWorld::entities_prevent_place(const Aabb& box) const {
+  for (entity::Entity* e : entities_) {
+    if (e != nullptr && !e->is_dead && e->bbox.intersects(box)) return true;
+  }
+  for (const auto& m : mobs_) {
+    if (m && !m->is_dead && m->bbox.intersects(box)) return true;
+  }
+  for (const auto& it : items_) {
+    if (it && !it->is_dead && it->bbox.intersects(box)) return true;
+  }
+  return false;
+}
+
 bool LiveWorld::is_normal_cube(int x, int y, int z) const {
   const int id = block_id(x, y, z);
   return bid::is_opaque(id) && bid::renders_as_normal(id);

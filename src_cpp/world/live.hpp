@@ -155,6 +155,9 @@ class LiveWorld : public edit::EditWorld, public tile::TileWorld {
   std::vector<entity::Entity*> entities_excluding(const entity::Entity& e,
                                                   const Aabb& box) override;
   bool chunks_exist(int x0, int y0, int z0, int x1, int y1, int z1) const override;
+  // World.checkNoEntityCollision (ItemBlock path): any live entity whose
+  // box intersects the new block vetoes placement.
+  bool entities_prevent_place(const Aabb& box) const override;
   bool is_normal_cube(int x, int y, int z) const override;
   bool solid_side(int x, int y, int z, bool missing_default) const override;
   bool material_solid_at(int x, int y, int z) const override;

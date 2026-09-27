@@ -5,6 +5,7 @@
 #include "entity/zombie.hpp"
 #include "entity/player.hpp"
 #include "entity/player_sp.hpp"
+#include "world/block_place.hpp"
 #include "world/live.hpp"
 
 using namespace craftpp;
@@ -73,8 +74,7 @@ TEST_CASE("zombie needs darkness to spawn", "[mob]") {
   CHECK(!open_ok);
 }
 
-TEST_CASE("survival mining drops the block (harvest before removal)", "[mob]") {
-  auto w = flat_world();
+TEST_CASE("survival mining drops the block (harvest before removal)", "[mob]") {  auto w = flat_world();
   entity::PlayerSP p(&w, "miner", 0);
   w.add_entity(&p);
   p.set_position(8.5, 70.0, 8.5);
@@ -206,4 +206,22 @@ TEST_CASE("player picks up ground-level drops (bbox range, not center)", "[mob]"
   }
   CHECK(dirt == 2);
   CHECK(w.items().empty());
+}
+
+TEST_CASE("placement inside entities is refused (checkNoEntityCollision)", "[mob]") {
+  auto w = flat_world();
+  entity::PlayerSP p(&w, "t", 0);
+  // Feet on the grass top (y=65): pos_y carries +1.62 like in game.
+  p.set_position_and_rotation(9.0, 66.62, 8.5, 0.0f, 0.0f);
+  w.add_entity(&p);
+  int stack = 64;
+  // Cell (9,65,8) overlaps the player: side 4 of air (10,65,8) -> refused.
+  CHECK(!world::edit::use_block_item(w, w.collider(), p, stack, 4, 0, 10, 65, 8, 4));
+  CHECK(w.block_id(9, 65, 8) == 0);
+  CHECK(stack == 64);
+  // Away from the player: allowed.
+  p.set_position_and_rotation(20.5, 66.62, 8.5, 0.0f, 0.0f);
+  CHECK(world::edit::use_block_item(w, w.collider(), p, stack, 4, 0, 10, 65, 8, 4));
+  CHECK(w.block_id(9, 65, 8) == 4);
+  CHECK(stack == 63);
 }
