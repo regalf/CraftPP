@@ -117,6 +117,11 @@ void PlayerSP::on_living_update() {
   const bool wants_sprint_fwd = movement_input->move_forward >= kSprintFwd;
   movement_input->update_player_move_state();
   prev_jump_held = movement_input->jump;
+  if (movement_input->sneak) {
+    // MovementInput sneak factor (sprint already cleared below when sneaking).
+    movement_input->move_strafe *= 0.3f;
+    movement_input->move_forward *= 0.3f;
+  }
   if (is_using_item()) {
     movement_input->move_strafe *= 0.2f;
     movement_input->move_forward *= 0.2f;
@@ -156,10 +161,10 @@ void PlayerSP::on_living_update() {
     if (movement_input->sneak) motion_y -= 0.15;
     if (movement_input->jump) motion_y += 0.15;
   }
-  // EntityPlayer.onLivingUpdate fly-timer decay (SP skips Player's update
-  // like the source skips to Living's; the decay runs here, after the check).
+  // EntityPlayer.onLivingUpdate via super (sprint 1.3x factors, camera
+  // smoothing, item animations): the source calls super.onLivingUpdate().
   if (fly_toggle_timer > 0) --fly_toggle_timer;
-  Living::on_living_update();
+  Player::on_living_update();
   if (on_ground && capabilities.is_flying) capabilities.is_flying = false;
 }
 

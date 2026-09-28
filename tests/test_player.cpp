@@ -7,6 +7,7 @@
 // runs the real controllers. PlayerSP.onLivingUpdate has no Java oracle
 // (needs the Minecraft client); it gets C++ logic tests, flagged in
 // docs/known-issues.md.
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
@@ -674,4 +675,55 @@ TEST_CASE("playerSP onLivingUpdate logic (no oracle: needs the client)", "[playe
   CHECK(sp.is_sprinting());
   sp.on_living_update();
   CHECK(!sp.is_sprinting());
+}
+
+TEST_CASE("sneak is 0.3x walk, sprint is 1.3x factor", "[player][sp]") {
+  struct KeyInput : MovementInput {
+    bool key_fwd = false;
+    bool key_sneak = false;
+    void update_player_move_state() override {
+      move_forward = key_fwd ? 1.0f : 0.0f;
+      jump = false;
+      sneak = key_sneak;
+    }
+  };
+  TestWorld w;
+  w.floor_y(0, 32, 0, 64, 63);
+  PlayerSP sp(&w, "Test", 0);
+  auto keys = std::make_unique<KeyInput>();
+  KeyInput* k = keys.get();
+  sp.movement_input = std::move(keys);
+  sp.rand.set_seed(4242);
+  auto walk = [&](bool sneak) {
+    sp.set_position_and_rotation(8.5, 65.63, 8.5, 0.0f, 0.0f);
+    sp.motion_x = sp.motion_y = sp.motion_z = 0.0;
+    sp.fall_distance = 0.0f;
+    sp.on_ground = true;
+    sp.set_sprinting(false);
+    sp.sprint_toggle_timer = 0;
+    k->key_fwd = true;
+    k->key_sneak = sneak;
+    for (int i = 0; i < 60; ++i) sp.on_living_update();
+    return sp.pos_z - 8.5;
+  };
+  const double full = walk(false);
+  CHECK(full > 1.0);
+  const double snuck = walk(true);
+  CHECK(snuck == Catch::Approx(full * 0.3).margin(full * 0.05));
+  // Sprint engages on double-tap and raises the ground factor 1.3x.
+  sp.set_position_and_rotation(8.5, 65.63, 8.5, 0.0f, 0.0f);
+  sp.motion_x = sp.motion_y = sp.motion_z = 0.0;
+  sp.on_ground = true;
+  sp.set_sprinting(false);
+  sp.sprint_toggle_timer = 0;
+  k->key_sneak = false;
+  k->key_fwd = true;
+  sp.on_living_update();
+  k->key_fwd = false;
+  sp.on_living_update();
+  k->key_fwd = true;
+  sp.on_living_update();
+  REQUIRE(sp.is_sprinting());
+  sp.on_living_update();  // factors apply on the tick after the trigger
+  CHECK(sp.land_movement_factor == Catch::Approx(0.13).margin(0.001));
 }

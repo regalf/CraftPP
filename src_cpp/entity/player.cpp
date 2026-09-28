@@ -30,7 +30,8 @@ void Player::update_entity_action_state() {
 }
 
 void Player::on_living_update() {
-  if (fly_toggle_timer > 0) --fly_toggle_timer;
+  // Note: no fly_toggle_timer decay here (SP-only timer, decayed in
+  // PlayerSP like the source).
   // Peaceful heal (difficulty 0) is M5 hunger-adjacent; test worlds are normal.
   for (auto& slot : inventory.main) {
     if (slot.has_value() && slot->animations_to_go > 0) --slot->animations_to_go;
