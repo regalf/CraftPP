@@ -301,6 +301,7 @@ struct Session {
   bool have_mouse = false;
   bool lmb_was = false, rmb_was = false, g_was = false, esc_was = false;
   bool w_was = false, space_was = false;  // edge latches for tap detectors
+  int rmb_cooldown = 0;  // rightClickDelayTimer: 4 ticks between RMB uses
   bool f5_was = false;
   int third_person = 0;  // 0 first, 1 third-back, 2 third-front (F5 cycles)
   // First-person equip animation (updateEquippedItem, per frame).
@@ -1080,13 +1081,15 @@ int main(int argc, char** argv) {
               if (hit && lmb) game->controller->send_block_removing(hx, hy, hz, side);
               if (!lmb) game->controller->reset_block_removing();
             }
-            if (hit && rmb && !game->rmb_was) {
+            if (game->rmb_cooldown > 0) --game->rmb_cooldown;
+            if (hit && rmb && (!game->rmb_was || game->rmb_cooldown == 0)) {
               if (auto* held = player.inventory.held()) {
                 if (held->has_value() &&
                     game->controller->send_place_block(held->value(), hx, hy, hz, side)) {
                   player.swing_item();  // clickMouse RMB swings on success
                 }
               }
+              game->rmb_cooldown = 4;  // clickMouse sets the timer every use
             }
             game->lmb_was = lmb;
             game->rmb_was = rmb;
