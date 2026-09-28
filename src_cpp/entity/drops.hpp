@@ -59,6 +59,7 @@ class DroppedItem : public Entity {
       motion_x = (world->world_rand().next_float() - world->world_rand().next_float()) * 0.2;
       motion_z = (world->world_rand().next_float() - world->world_rand().next_float()) * 0.2;
     }
+    push_out_of_blocks();
     move_entity(motion_x, motion_y, motion_z);
     double friction = 0.98;
     if (on_ground) {
@@ -93,6 +94,55 @@ class DroppedItem : public Entity {
   static int floor_int(double v) {
     const int i = static_cast<int>(v);
     return v < 0.0 && v != i ? i - 1 : i;
+  }
+
+  static bool is_normal_cube_at(EntityWorld* w, int x, int y, int z) {
+    const int id = w->block_id(x, y, z);
+    return id != 0 && world::bid::is_opaque(id) && world::bid::renders_as_normal(id);
+  }
+
+  // Entity.pushOutOfBlocks: when the item center sits inside a normal cube,
+  // shove motion toward the nearest open face (visual draws only; the
+  // source uses wild rand, pinned here).
+  void push_out_of_blocks() {
+    const double cx = pos_x, cyy = (bbox.min_y + bbox.max_y) / 2.0, cz = pos_z;
+    const int bx = floor_int(cx), by = floor_int(cyy), bz = floor_int(cz);
+    if (!is_normal_cube_at(world, bx, by, bz)) return;
+    const double fx = cx - bx, fy = cyy - by, fz = cz - bz;
+    int dir = -1;
+    double best = 9999.0;
+    if (!is_normal_cube_at(world, bx - 1, by, bz) && fx < best) {
+      best = fx;
+      dir = 0;
+    }
+    if (!is_normal_cube_at(world, bx + 1, by, bz) && 1.0 - fx < best) {
+      best = 1.0 - fx;
+      dir = 1;
+    }
+    if (!is_normal_cube_at(world, bx, by - 1, bz) && fy < best) {
+      best = fy;
+      dir = 2;
+    }
+    if (!is_normal_cube_at(world, bx, by + 1, bz) && 1.0 - fy < best) {
+      best = 1.0 - fy;
+      dir = 3;
+    }
+    if (!is_normal_cube_at(world, bx, by, bz - 1) && fz < best) {
+      best = fz;
+      dir = 4;
+    }
+    if (!is_normal_cube_at(world, bx, by, bz + 1) && 1.0 - fz < best) {
+      best = 1.0 - fz;
+      dir = 5;
+    }
+    if (dir < 0) return;
+    const double push = world->world_rand().next_float() * 0.2 + 0.1;
+    if (dir == 0) motion_x = -push;
+    if (dir == 1) motion_x = push;
+    if (dir == 2) motion_y = -push;
+    if (dir == 3) motion_y = push;
+    if (dir == 4) motion_z = -push;
+    if (dir == 5) motion_z = push;
   }
 };
 

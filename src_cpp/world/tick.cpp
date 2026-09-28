@@ -228,7 +228,7 @@ void flower_tick(edit::EditWorld& w, JavaRandom& rand, int id, int x, int y, int
   (void)rand;
   // Mirrors BlockFlower.checkFlowerChange (drop + pop).
   if (!flower_can_stay_tick(w, id, x, y, z)) {
-    edit::drop_one(w, x, y, z, id, 1, w.block_meta(x, y, z));
+    edit::drop_as_item(w, x, y, z, id, w.block_meta(x, y, z), 0);
     edit::break_to_air(w, x, y, z);
   }
 }

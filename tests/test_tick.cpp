@@ -258,3 +258,33 @@ TEST_CASE("mined drops pop out with EntityItem motion", "[tick]") {
   for (int i = 0; i < 4; ++i) w.tick();
   CHECK(w.items()[0]->pos_y > y0);
 }
+
+TEST_CASE("embedded drops are pushed out of solid ground", "[tick]") {
+  auto w = flat_world();
+  // Stone shell around (8,65,8), air above: drop starts interpenetrated.
+  for (int dx = 7; dx <= 9; ++dx)
+    for (int dz = 7; dz <= 9; ++dz)
+      for (int dy = 64; dy <= 66; ++dy) w.set_raw(dx, dy, dz, bid::kStone, 0);
+  w.set_raw(8, 66, 8, 0, 0);
+  w.set_raw(8, 67, 8, 0, 0);
+  w.on_item_drop(3, 1, 0, 8.5, 65.5, 8.5, 0, 0, 0);
+  for (int i = 0; i < 60; ++i) w.tick();
+  REQUIRE(!w.items().empty());
+  const auto& it = w.items()[0];
+  const int cx = static_cast<int>(it->pos_x), cy = static_cast<int>(it->pos_y),
+            cz = static_cast<int>(it->pos_z);
+  CHECK(w.block_id(cx, cy, cz) == 0);  // escaped into air, not sunk in stone
+}
+
+TEST_CASE("grass pops drop seeds-or-nothing, never the tuft block", "[tick]") {
+  craftpp::JavaRandom r(11L);
+  bool saw_seeds = false;
+  for (int i = 0; i < 64; ++i) {
+    const int d = edit::drop_id(bid::kTallGrass, 1, r, 0);
+    CHECK(d != bid::kTallGrass);
+    if (d == 295) saw_seeds = true;
+  }
+  CHECK(saw_seeds);  // 1/8 rate hits over 64 rolls
+  craftpp::JavaRandom r2(12L);
+  CHECK(edit::drop_id(bid::kDeadBush, 0, r2, 0) == -1);
+}
