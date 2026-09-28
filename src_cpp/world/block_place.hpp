@@ -118,7 +118,9 @@ int drop_count(int id, JavaRandom& r);
 
 // ---- break/place gameplay ----
 float block_strength(int id, int held_item);  // Block.blockStrength (0 = instant-ish)
-void harvest_block(EditWorld& w, Breaker& br, int x, int y, int z, int meta);
+// Block.harvestBlock: drops for the (already-read) block id. Call AFTER the
+// cell goes to air like sendBlockRemoved does, so drops spawn in air.
+void harvest_block(EditWorld& w, Breaker& br, int id, int x, int y, int z, int meta);
 // ItemBlock.onItemUse (generic placement for all block items).
 bool use_block_item(EditWorld& w, BlockCollider& collider, Breaker& br, int& stack_size,
                     int item_id, int item_damage, int x, int y, int z, int side);

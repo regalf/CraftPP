@@ -123,12 +123,14 @@ bool ControllerSP::send_block_removed(int x, int y, int z, int side) {
       if (held->value().empty()) p.destroy_current_equipped_item();
     }
   }
-  // Vanilla order: harvest BEFORE the block goes to air (harvest_block
-  // reads the live block for drops).
-  if (id > 0 && p.can_harvest_block(id)) {
-    world::edit::harvest_block(w, p, x, y, z, meta);
+  // Vanilla order (sendBlockRemoved): the cell goes to air FIRST, then
+  // harvestBlock drops into the freed cell (drops must never spawn inside
+  // the still-solid block).
+  const bool removed = Controller::send_block_removed(x, y, z, side);
+  if (removed && p.can_harvest_block(id)) {
+    world::edit::harvest_block(w, p, id, x, y, z, meta);
   }
-  return Controller::send_block_removed(x, y, z, side);
+  return removed;
 }
 
 void ControllerSP::reset_block_removing() {

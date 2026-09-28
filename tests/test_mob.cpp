@@ -93,6 +93,12 @@ TEST_CASE("survival mining drops the block (harvest before removal)", "[mob]") {
     if (it->item.item_id == world::bid::kDirt) dirt = true;
   }
   CHECK(dirt);
+  // Drops spawn into the freed cell (air), never inside solid ground.
+  for (auto& it : w.items()) {
+    const int cx = static_cast<int>(it->pos_x), cy = static_cast<int>(it->pos_y),
+              cz = static_cast<int>(it->pos_z);
+    CHECK(w.block_id(cx, cy, cz) == 0);
+  }
 }
 
 TEST_CASE("pig drops pork on death", "[mob]") {

@@ -1105,8 +1105,7 @@ void drop_as_item(EditWorld& w, int x, int y, int z, int block_id, int meta, int
   }
 }
 
-void harvest_block(EditWorld& w, Breaker& br, int x, int y, int z, int meta) {
-  const int id = w.block_id(x, y, z);
+void harvest_block(EditWorld& w, Breaker& br, int id, int x, int y, int z, int meta) {
   br.add_stat(2000000 + id, 1);  // mineBlockStatArray slot (stat values M5)
   br.add_exhaustion(0.025f);
   // Silk touch / fortune need enchanted inventory (M5): plain drops here.
