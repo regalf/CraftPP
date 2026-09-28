@@ -13,6 +13,12 @@ struct MovementInput {
   float move_forward = 0.0f;
   bool jump = false;
   bool sneak = false;
+  // Frame-rate press edges (latched by the app): presses fully inside one
+  // 50ms tick are invisible to the per-tick level sampling, so the app
+  // counts rising edges per frame and the tick consumes them as taps.
+  // Untouched in tests = pure vanilla level semantics.
+  int fwd_press_edges = 0;
+  int jump_press_edges = 0;
   virtual ~MovementInput() = default;
   virtual void update_player_move_state() {}  // base impl is empty
 };

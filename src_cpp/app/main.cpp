@@ -287,6 +287,7 @@ struct Session {
   double last_x = 0.0, last_y = 0.0;
   bool have_mouse = false;
   bool lmb_was = false, rmb_was = false, g_was = false, esc_was = false;
+  bool w_was = false, space_was = false;  // edge latches for tap detectors
   double accumulator = 0.0;
   int tick_count = 0;
   double tps_window = 0.0;
@@ -1002,13 +1003,21 @@ int main(int argc, char** argv) {
           player.rotation_pitch = game->pitch;
 
           auto& in = player.movement_input;
+          const bool w_now = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+          const bool space_now = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+          // Latch sub-tick press edges for double-tap detectors (sprint/fly):
+          // a full tap inside one 50ms tick is invisible to level sampling.
+          if (w_now && !game->w_was) in->fwd_press_edges++;
+          if (space_now && !game->space_was) in->jump_press_edges++;
+          game->w_was = w_now;
+          game->space_was = space_now;
           in->move_forward =
-              (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS ? 1.0f : 0.0f) -
+              (w_now ? 1.0f : 0.0f) -
               (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ? 1.0f : 0.0f);
           in->move_strafe =
               (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ? 1.0f : 0.0f) -
               (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ? 1.0f : 0.0f);
-          in->jump = glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS;
+          in->jump = space_now;
           in->sneak = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
 
           game->accumulator += frame;

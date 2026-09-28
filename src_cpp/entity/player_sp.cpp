@@ -117,6 +117,12 @@ void PlayerSP::on_living_update() {
   const bool wants_sprint_fwd = movement_input->move_forward >= kSprintFwd;
   movement_input->update_player_move_state();
   prev_jump_held = movement_input->jump;
+  // Frame-latched press edges count as taps when the level sampling missed
+  // them (tap fully inside one tick); consumed here, once per tap.
+  const bool latched_fwd = movement_input->fwd_press_edges > 0;
+  movement_input->fwd_press_edges = 0;
+  const bool latched_jump = movement_input->jump_press_edges > 0;
+  movement_input->jump_press_edges = 0;
   if (movement_input->sneak) {
     // MovementInput sneak factor (sprint already cleared below when sneaking).
     movement_input->move_strafe *= 0.3f;
@@ -135,8 +141,9 @@ void PlayerSP::on_living_update() {
   push_out_of_blocks(pos_x + width * 0.35, bbox.min_y + 0.5, pos_z + width * 0.35);
 
   const bool can_sprint = static_cast<float>(food_level()) > 6.0f;
-  if (on_ground && !wants_sprint_fwd && movement_input->move_forward >= kSprintFwd &&
-      !is_sprinting() && can_sprint && !is_using_item()) {
+  const bool tap_fwd =
+      (!wants_sprint_fwd || latched_fwd) && movement_input->move_forward >= kSprintFwd;
+  if (on_ground && tap_fwd && !is_sprinting() && can_sprint && !is_using_item()) {
     if (sprint_toggle_timer == 0) {
       sprint_toggle_timer = 7;
     } else {
@@ -149,7 +156,7 @@ void PlayerSP::on_living_update() {
       (movement_input->move_forward < kSprintFwd || collided_horizontally || !can_sprint)) {
     set_sprinting(false);
   }
-  if (capabilities.allow_flying && !was_jump && movement_input->jump) {
+  if (capabilities.allow_flying && (!was_jump || latched_jump) && movement_input->jump) {
     if (fly_toggle_timer == 0) {
       fly_toggle_timer = 7;
     } else {

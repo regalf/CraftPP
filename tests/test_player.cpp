@@ -727,3 +727,46 @@ TEST_CASE("sneak is 0.3x walk, sprint is 1.3x factor", "[player][sp]") {
   sp.on_living_update();  // factors apply on the tick after the trigger
   CHECK(sp.land_movement_factor == Catch::Approx(0.13).margin(0.001));
 }
+
+TEST_CASE("latched frame edges tap sprint/fly held across ticks", "[player][sp]") {
+  struct KeyInput : MovementInput {
+    bool key_fwd = false;
+    bool key_jump = false;
+    void update_player_move_state() override {
+      move_forward = key_fwd ? 1.0f : 0.0f;
+      jump = key_jump;
+      sneak = false;
+    }
+  };
+  TestWorld w;
+  w.floor_y(0, 32, 0, 64, 63);
+  PlayerSP sp(&w, "Test", 0);
+  auto keys = std::make_unique<KeyInput>();
+  KeyInput* k = keys.get();
+  sp.movement_input = std::move(keys);
+  sp.rand.set_seed(4242);
+  sp.set_position_and_rotation(8.5, 65.63, 8.5, 0.0f, 0.0f);
+  sp.motion_x = sp.motion_y = sp.motion_z = 0.0;
+  sp.on_ground = true;
+  // Held W across ticks (stale never drops): sub-tick taps arrive latched.
+  k->key_fwd = true;
+  for (int i = 0; i < 12; ++i) sp.on_living_update();  // level-arm decays away
+  CHECK(!sp.is_sprinting());
+  CHECK(sp.sprint_toggle_timer == 0);
+  sp.movement_input->fwd_press_edges = 1;  // invisible tap while held
+  sp.on_living_update();
+  CHECK(sp.sprint_toggle_timer == 7);  // armed
+  CHECK(!sp.is_sprinting());
+  sp.movement_input->fwd_press_edges = 1;
+  sp.on_living_update();
+  CHECK(sp.is_sprinting());  // engaged
+  // Fly toggle via latched jump edge while held.
+  sp.capabilities.allow_flying = true;
+  sp.on_ground = true;
+  k->key_jump = true;
+  for (int i = 0; i < 5; ++i) sp.on_living_update();
+  CHECK(!sp.capabilities.is_flying);
+  sp.movement_input->jump_press_edges = 1;
+  sp.on_living_update();
+  CHECK(sp.capabilities.is_flying);
+}
