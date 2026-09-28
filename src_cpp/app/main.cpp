@@ -194,6 +194,8 @@ struct Args {
   int shot_frames = 5;
   std::int64_t seed = 1;
   int view = 0;  // debug: start in third-person view 1/2 (F5 cycles in game)
+  float yaw = 0.0F, pitch = 0.0F;  // debug view direction overrides
+  bool yaw_set = false, pitch_set = false;
 };
 
 Args parse_args(int argc, char** argv) {
@@ -211,6 +213,12 @@ Args parse_args(int argc, char** argv) {
       a.shot_frames = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--view") == 0 && i + 1 < argc) {
       a.view = std::atoi(argv[++i]);
+    } else if (std::strcmp(argv[i], "--yaw") == 0 && i + 1 < argc) {
+      a.yaw = static_cast<float>(std::atof(argv[++i]));
+      a.yaw_set = true;
+    } else if (std::strcmp(argv[i], "--pitch") == 0 && i + 1 < argc) {
+      a.pitch = static_cast<float>(std::atof(argv[++i]));
+      a.pitch_set = true;
     }
   }
   return a;
@@ -620,6 +628,11 @@ int main(int argc, char** argv) {
           player.set_position_and_rotation(sx + 0.5, game->ground + 12.0 + 1.62, sz + 0.5, 0.0f,
                                           0.0f);
         }
+        // Vanilla keeps the saved view direction (and --yaw/--pitch override).
+        game->yaw = player.rotation_yaw;
+        game->pitch = player.rotation_pitch;
+        if (args.yaw_set) game->yaw = args.yaw;
+        if (args.pitch_set) game->pitch = args.pitch;
         game->csp = std::make_unique<ControllerSP>(world, player);
         game->ccr = std::make_unique<ControllerCreative>(world, player);
         game->controller = game->csp.get();
@@ -1351,7 +1364,14 @@ int main(int argc, char** argv) {
         if (game->third_person > 0) {
           const float body_yaw =
               lerp_angle(player.prev_render_yaw_offset, player.render_yaw_offset, alpha);
-          const float head_yaw = lerp_angle(body_yaw, game->yaw, 1.0);
+          // Head takes the RELATIVE turn (rotationYaw - renderYawOffset),
+          // clamped to +-75 like RenderLiving (the body drag follows).
+          float head_rel = game->yaw - body_yaw;
+          while (head_rel > 180.0F) head_rel -= 360.0F;
+          while (head_rel < -180.0F) head_rel += 360.0F;
+          if (head_rel < -75.0F) head_rel = -75.0F;
+          if (head_rel >= 75.0F) head_rel = 75.0F;
+          const float head_yaw = head_rel;
           float sw = player.swing - player.prev_swing;
           if (sw < 0.0F) sw += 1.0F;
           const float swing_p = player.prev_swing + sw * static_cast<float>(alpha);
