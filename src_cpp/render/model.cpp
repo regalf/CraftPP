@@ -1,5 +1,10 @@
 #include "render/model.hpp"
 
+#include "gui/item_icons.hpp"
+#include "render/item_mesh.hpp"
+#include "world/block_place.hpp"
+#include "world/blocks.hpp"
+
 namespace craftpp::render {
 
 namespace {
@@ -79,6 +84,105 @@ Mesh build_model(const std::vector<ModelPart>& parts, int tex_w, int tex_h, floa
 Mesh entity_mesh(const std::vector<ModelPart>& parts, int tex_w, int tex_h, float yaw_deg,
                  float brightness, float model_scale, float roll_deg) {
   Mesh m = build_model(parts, tex_w, tex_h, brightness);
+  place_mesh(m, model_scale, roll_deg, yaw_deg, 0.0F, 0.0F, 0.0F);
+  return m;
+}
+
+void build_equipped(EquippedMeshes& out, const ModelPart& arm, int item_id, int damage) {
+  if (item_id <= 0) return;
+  using namespace item_mesh;
+  // Arm postRender in model units: translate pivot, rotate Z/Y/X.
+  Mat4 m;
+  m.translate(arm.px, arm.py, arm.pz);
+  m.rotate(arm.rz * 180.0F / 3.14159265F, 0.0F, 0.0F, 1.0F);
+  m.rotate(arm.ry * 180.0F / 3.14159265F, 0.0F, 1.0F, 0.0F);
+  m.rotate(arm.rx * 180.0F / 3.14159265F, 1.0F, 0.0F, 0.0F);
+  // postRender scale is 1/16 (model -> block units for the chains below).
+  constexpr float kU = 1.0F / 16.0F;
+  const bool is_block = item_id < 256;
+  const int rt = is_block ? world::bid::render_type(item_id) : -1;
+  const bool cube3d =
+      is_block && (rt == 0 || rt == 10 || rt == 11 || rt == 13 || rt == 16 || rt == 21 ||
+                   rt == 22 || rt == 27);
+  // Geometry helpers work in 0..1 block units; scale up to model units.
+  Mat4 to_model;
+  to_model.scale(16.0F, 16.0F, 16.0F);
+  if (cube3d) {
+    Mat4 t = m;
+    t.translate(-1.0F, 7.0F, 1.0F);
+    t.translate(0.0F, 3.0F * kU, -5.0F * kU);
+    t.scale(0.5F * 12.0F * kU, -0.5F * 12.0F * kU, 0.5F * 12.0F * kU);
+    t.rotate(20.0F, 1.0F, 0.0F, 0.0F);
+    t.rotate(45.0F, 0.0F, 1.0F, 0.0F);
+    // renderBlockOnInventory unit cube (0..1) -> model units.
+    Mat4 u = t;
+    u.scale(16.0F, 16.0F, 16.0F);
+    Mesh tmp;
+    emit_unit_cube(tmp, Mat4(), item_id, damage, 1.0F);
+    for (auto& v : tmp.vertices) {
+      const float* mm = u.m;
+      const float x = mm[0] * v.x + mm[4] * v.y + mm[8] * v.z + mm[12];
+      const float y = mm[1] * v.x + mm[5] * v.y + mm[9] * v.z + mm[13];
+      const float z = mm[2] * v.x + mm[6] * v.y + mm[10] * v.z + mm[14];
+      out.atlas.vertices.push_back({x, y, z, v.r, v.g, v.b, v.u, v.v});
+    }
+    const std::uint32_t base =
+        static_cast<std::uint32_t>(out.atlas.vertices.size()) - tmp.vertices.size();
+    for (std::uint32_t i : tmp.indices) out.atlas.indices.push_back(base + i);
+    return;
+  }
+  // Icon tile (blocks: side-2 terrain tile like renderItem).
+  int tile = 0;
+  Mesh* mesh = &out.items;
+  if (is_block) {
+    tile = world::bid::block_texture(item_id, 2, damage);
+    mesh = &out.atlas;
+  } else {
+    tile = gui::item_sprite_index(item_id);
+    if (tile < 0) return;
+  }
+  Mat4 t = m;
+  if (item_id == 261) {
+    // Bow branch (no use-draw pose: M5).
+    t.translate(0.0F, 2.0F * kU, 5.0F * kU);
+    t.rotate(-20.0F, 0.0F, 1.0F, 0.0F);
+    t.scale(10.0F * kU, -10.0F * kU, 10.0F * kU);
+    t.rotate(-100.0F, 1.0F, 0.0F, 0.0F);
+    t.rotate(45.0F, 0.0F, 1.0F, 0.0F);
+  } else if (world::edit::item_full_3d(item_id)) {
+    if (item_id == 346) {
+      t.rotate(180.0F, 0.0F, 0.0F, 1.0F);
+      t.translate(0.0F, -2.0F * kU, 0.0F);
+    }
+    t.translate(0.0F, 3.0F * kU, 0.0F);
+    t.scale(10.0F * kU, -10.0F * kU, 10.0F * kU);
+    t.rotate(-100.0F, 1.0F, 0.0F, 0.0F);
+    t.rotate(45.0F, 0.0F, 1.0F, 0.0F);
+  } else {
+    t.translate(0.25F, 3.0F * kU, -3.0F * kU);
+    t.scale(6.0F * kU, 6.0F * kU, 6.0F * kU);
+    t.rotate(60.0F, 0.0F, 0.0F, 1.0F);
+    t.rotate(-90.0F, 1.0F, 0.0F, 0.0F);
+    t.rotate(20.0F, 0.0F, 0.0F, 1.0F);
+  }
+  // renderItem extrusion works in 0..1 units: scale output to model units.
+  Mat4 u = t;
+  u.scale(16.0F, 16.0F, 16.0F);
+  Mesh tmp;
+  emit_extruded(tmp, Mat4(), tile, 1.0F);
+  for (auto& v : tmp.vertices) {
+    const float* mm = u.m;
+    const float x = mm[0] * v.x + mm[4] * v.y + mm[8] * v.z + mm[12];
+    const float y = mm[1] * v.x + mm[5] * v.y + mm[9] * v.z + mm[13];
+    const float z = mm[2] * v.x + mm[6] * v.y + mm[10] * v.z + mm[14];
+    mesh->vertices.push_back({x, y, z, v.r, v.g, v.b, v.u, v.v});
+  }
+  const std::uint32_t base = static_cast<std::uint32_t>(mesh->vertices.size()) - tmp.vertices.size();
+  for (std::uint32_t i : tmp.indices) mesh->indices.push_back(base + i);
+}
+
+void place_mesh(Mesh& m, float model_scale, float roll_deg, float yaw_deg, float ox, float oy,
+                float oz) {
   constexpr float kScale = 1.0F / 16.0F;
   const float yr = yaw_deg * 3.14159265F / 180.0F;
   const float c = std::cos(yr), s = std::sin(yr);
@@ -86,17 +190,16 @@ Mesh entity_mesh(const std::vector<ModelPart>& parts, int tex_w, int tex_h, floa
   const float rc = std::cos(rr), rs = std::sin(rr);
   for (Vertex& v : m.vertices) {
     // Model-unit scale, mirror X + ground at 24.125 (RenderLiving pair),
-    // death roll about the feet, then yaw about Y.
+    // death roll about the feet, then yaw about Y, then translate.
     const float lx = -v.x * model_scale * kScale;
     const float ly = (24.125F - v.y * model_scale) * kScale;
     const float lz = v.z * model_scale * kScale;
     const float qx = lx * rc - ly * rs;
     const float qy = lx * rs + ly * rc;
-    v.x = qx * c + lz * s;
-    v.y = qy;
-    v.z = -qx * s + lz * c;
+    v.x = qx * c + lz * s + ox;
+    v.y = qy + oy;
+    v.z = -qx * s + lz * c + oz;
   }
-  return m;
 }
 
 namespace {
@@ -150,7 +253,7 @@ std::vector<ModelPart> player_parts(float limb_swing, float swing_amount, float 
   float leg_r_rx = std::cos(limb_swing * 0.6662F) * 1.4F * swing_amount;
   float leg_l_rx = std::cos(limb_swing * 0.6662F + kPi) * 1.4F * swing_amount;
   if (held_pose != 0) {
-    arm_l_rx = arm_l_rx * 0.5F - kPi * 0.1F * held_pose;
+    // field_1278_i (held item) bends the RIGHT arm only.
     arm_r_rx = arm_r_rx * 0.5F - kPi * 0.1F * held_pose;
   }
   if (attack_t > 0.0F) {

@@ -128,11 +128,11 @@ TEST_CASE("first-person hand and held item meshes", "[model]") {
     CHECK(fm.atlas.vertices.size() == 24);
     CHECK(fm.skin.vertices.empty());
   }
-  // Held stick: items sprite, 8 verts (double-sided).
+  // Held stick: extruded icon (front+back+64 side quads).
   {
     craftpp::render::FirstPersonMeshes fm;
     craftpp::render::build_first_person(fm, 280, 0, 1.0F, 0.0F);
-    CHECK(fm.items.vertices.size() == 8);
+    CHECK(fm.items.vertices.size() == (2 + 64) * 4);
     CHECK(fm.skin.vertices.empty());
   }
   // Swing moves the item.
@@ -150,4 +150,40 @@ TEST_CASE("first-person hand and held item meshes", "[model]") {
     }
     CHECK(moved);
   }
+}
+
+TEST_CASE("hand cube top face points up (CCW front)", "[model]") {
+  // Dirt cube in hand: the +Y face normal must be +Y (visible from above).
+  craftpp::render::FirstPersonMeshes fm;
+  craftpp::render::build_first_person(fm, 3, 0, 1.0F, 0.0F);
+  REQUIRE(fm.atlas.vertices.size() == 24);
+  REQUIRE(fm.atlas.indices.size() == 36);
+  // Top face = verts 4..7 (mesher order): triangle (4,5,6) normal.
+  const auto& v = fm.atlas.vertices;
+  const float e1x = v[5].x - v[4].x, e1y = v[5].y - v[4].y, e1z = v[5].z - v[4].z;
+  const float e2x = v[6].x - v[4].x, e2y = v[6].y - v[4].y, e2z = v[6].z - v[4].z;
+  const float ny = e1z * e2x - e1x * e2z;  // (e1 x e2).y
+  CHECK(ny > 0.0F);
+}
+
+TEST_CASE("held pose bends the right arm only", "[model]") {
+  const auto bare = craftpp::render::player_parts(1.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0, false, 0);
+  const auto held = craftpp::render::player_parts(1.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0, false, 1);
+  CHECK(held[3].rx != Catch::Approx(bare[3].rx));  // right arm bends
+  CHECK(held[4].rx == Catch::Approx(bare[4].rx));  // left arm keeps walking
+}
+
+TEST_CASE("equipped item builds at the right hand", "[model]") {
+  const auto parts = craftpp::render::player_parts(0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0, false, 1);
+  craftpp::render::EquippedMeshes eq;
+  craftpp::render::build_equipped(eq, parts[3], 3, 0);  // dirt cube
+  CHECK(!eq.atlas.vertices.empty());
+  CHECK(eq.items.vertices.empty());
+  craftpp::render::EquippedMeshes eq2;
+  craftpp::render::build_equipped(eq2, parts[3], 280, 0);  // stick extrude
+  CHECK(!eq2.items.vertices.empty());
+  craftpp::render::EquippedMeshes eq3;
+  craftpp::render::build_equipped(eq3, parts[3], 0, 0);  // empty
+  CHECK(eq3.atlas.vertices.empty());
+  CHECK(eq3.items.vertices.empty());
 }

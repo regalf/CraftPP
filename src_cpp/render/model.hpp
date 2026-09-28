@@ -45,6 +45,21 @@ Mesh build_model(const std::vector<ModelPart>& parts, int tex_w, int tex_h, floa
 Mesh entity_mesh(const std::vector<ModelPart>& parts, int tex_w, int tex_h, float yaw_deg,
                  float brightness, float model_scale = 1.0F, float roll_deg = 0.0F);
 
+// Applies the entity_mesh placement (scale, mirror, ground, roll, yaw,
+// translate) to an existing model-unit mesh in place.
+void place_mesh(Mesh& m, float model_scale, float roll_deg, float yaw_deg, float ox, float oy,
+                float oz);
+
+// Held item at the right hand (RenderPlayer renderSpecials, no use-poses,
+// no glint, no fish-stick swap: M5 leftovers). Model-unit mesh; the caller
+// runs place_mesh with the same params as the body. Meshes split by
+// texture (atlas/items); empty when item_id <= 0.
+struct EquippedMeshes {
+  Mesh atlas;
+  Mesh items;
+};
+void build_equipped(EquippedMeshes& out, const ModelPart& arm, int item_id, int damage);
+
 // Pig (ModelPig/ModelQuadruped, leg height 6): walk phase + head look.
 std::vector<ModelPart> pig_parts(float limb_swing, float swing_amount, float head_yaw_deg,
                                  float head_pitch_deg);

@@ -494,6 +494,11 @@ int armor_value(int item_id) {
   return kRed[(item_id - 298) / 4][(item_id - 298) % 4];
 }
 
+bool item_full_3d(int item_id) {
+  if (is_sword(item_id) || tool_material(item_id) >= 0) return true;
+  return item_id == 346 || item_id == 280 || item_id == 352;  // rod, stick, bone
+}
+
 // ---- placement rules ----
 
 bool soil_for_plants(int below_id) {

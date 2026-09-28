@@ -1082,8 +1082,10 @@ int main(int argc, char** argv) {
             }
             if (hit && rmb && !game->rmb_was) {
               if (auto* held = player.inventory.held()) {
-                if (held->has_value())
-                  game->controller->send_place_block(held->value(), hx, hy, hz, side);
+                if (held->has_value() &&
+                    game->controller->send_place_block(held->value(), hx, hy, hz, side)) {
+                  player.swing_item();  // clickMouse RMB swings on success
+                }
               }
             }
             game->lmb_was = lmb;
@@ -1402,6 +1404,16 @@ int main(int argc, char** argv) {
             v.y += feet_y;
             v.z += mz;
           }
+          // Held item at the right hand (renderSpecials equipped path).
+          craftpp::render::EquippedMeshes eq;
+          if (has_held) {
+            craftpp::render::build_equipped(eq, parts[3], held_pl->value().item_id,
+                                            held_pl->value().damage);
+            craftpp::render::place_mesh(eq.atlas, 15.0F / 16.0F, roll, 180.0F - body_yaw, mx,
+                                        feet_y, mz);
+            craftpp::render::place_mesh(eq.items, 15.0F / 16.0F, roll, 180.0F - body_yaw, mx,
+                                        feet_y, mz);
+          }
           terrain_prog.use();
           terrain_prog.set_mat4(t_mvp, &vp[0][0]);
           terrain_prog.set_mat4(t_view, &view[0][0]);
@@ -1414,6 +1426,18 @@ int main(int argc, char** argv) {
           craftpp::render::Tessellator ptess;
           ptess.upload(mesh);
           ptess.draw();
+          if (!eq.atlas.vertices.empty()) {
+            atlas.bind(0);
+            craftpp::render::Tessellator qtess;
+            qtess.upload(eq.atlas);
+            qtess.draw();
+          }
+          if (!eq.items.vertices.empty()) {
+            items_tex.bind(0);
+            craftpp::render::Tessellator qtess;
+            qtess.upload(eq.items);
+            qtess.draw();
+          }
           glEnable(GL_CULL_FACE);
         }
 
