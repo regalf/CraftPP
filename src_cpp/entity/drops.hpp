@@ -52,6 +52,11 @@ class DroppedItem : public Entity {
 
   void on_update() override {
     if (pickup_delay > 0) --pickup_delay;
+    // Vanilla EntityItem sets prevPos = pos every tick (before integrating
+    // motion); without this the render lerp oscillates spawn<->pos.
+    prev_pos_x = pos_x;
+    prev_pos_y = pos_y;
+    prev_pos_z = pos_z;
     motion_y -= 0.04;
     const int feet = world->block_id(floor_int(pos_x), floor_int(pos_y), floor_int(pos_z));
     if (world::bid::material_of(feet) == world::bid::Material::Lava) {

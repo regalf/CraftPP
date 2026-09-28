@@ -288,3 +288,20 @@ TEST_CASE("grass pops drop seeds-or-nothing, never the tuft block", "[tick]") {
   craftpp::JavaRandom r2(12L);
   CHECK(edit::drop_id(bid::kDeadBush, 0, r2, 0) == -1);
 }
+
+TEST_CASE("dropped items track prev_pos every tick (no render flicker)", "[tick]") {
+  auto w = flat_world();
+  w.on_item_drop(3, 1, 0, 8.5, 70.0, 8.5, 0.05, 0.0, -0.03);
+  REQUIRE(!w.items().empty());
+  for (int i = 0; i < 30; ++i) w.tick();
+  const auto& it = w.items()[0];
+  // prev tracks the last tick (within one tick of residual slide), never
+  // stuck at the spawn point (that desync flickered spawn<->pos).
+  CHECK(std::abs(it->pos_x - it->prev_pos_x) < 0.01);
+  CHECK(std::abs(it->pos_z - it->prev_pos_z) < 0.01);
+  // Landed and stable (no physics jitter underneath the render).
+  CHECK(it->on_ground);
+  const double rest = it->pos_y;
+  for (int i = 0; i < 10; ++i) w.tick();
+  CHECK(w.items()[0]->pos_y == rest);
+}
