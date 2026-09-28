@@ -1491,12 +1491,14 @@ int main(int argc, char** argv) {
             held_damage = held->value().damage;
           }
           const int slot = player.inventory.current;
-          const bool same = (game->equip_slot == slot && game->equip_id == held_id &&
-                             game->equip_damage == held_damage);
+          // Same stack worn down (slot+id equal, damage adopted silently):
+          // no re-equip, like the source identity check.
+          const bool same_id =
+              (game->equip_slot == slot && game->equip_id == held_id);
           game->equip_slot = slot;
           game->equip_id = held_id;
           game->equip_damage = held_damage;
-          const float target = same ? 1.0F : 0.0F;
+          const float target = same_id ? 1.0F : 0.0F;
           float de = target - game->equip_cur;
           if (de < -0.4F) de = -0.4F;
           if (de > 0.4F) de = 0.4F;

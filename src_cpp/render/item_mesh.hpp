@@ -105,26 +105,29 @@ inline void emit_unit_cube(Mesh& m, const Mat4& t, int id, int damage, float bri
 }
 
 // func_40686_a extrusion (1/16 thick icon): front/back + 16-slice sides.
+// UVs are texel-centered (vanilla uses exact edges, which is equivalent
+// under its LINEAR filtering; under our NEAREST, edge texels would bleed
+// into neighbor tiles and fringe the silhouette).
 inline void emit_extruded(Mesh& m, const Mat4& t, int tile, float bright) {
   const float tx = static_cast<float>((tile & 15) * 16);
   const float ty = static_cast<float>(tile & 240);
-  const float u0 = tx / 256.0F, u1 = (tx + 15.99F) / 256.0F;
-  const float v0 = ty / 256.0F, v1 = (ty + 15.99F) / 256.0F;
+  const float u0 = (tx + 0.5F) / 256.0F, u1 = (tx + 15.5F) / 256.0F;
+  const float v0 = (ty + 0.5F) / 256.0F, v1 = (ty + 15.5F) / 256.0F;
   constexpr float kTh = 1.0F / 16.0F;
   emit_quad_uv(m, t, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, bright, bright, bright, u0, v1, u1,
                v1, u1, v0, u0, v0);
   emit_quad_uv(m, t, 0, 1, -kTh, 1, 1, -kTh, 1, 0, -kTh, 0, 0, -kTh, bright, bright, bright,
                u0, v0, u1, v0, u1, v1, u0, v1);
   for (int i = 0; i < 16; ++i) {
-    const float f = static_cast<float>(i) / 16.0F;
-    const float uu = u0 + (u1 - u0) * f - 0.001953125F;
+    const float f = (static_cast<float>(i) + 0.5F) / 16.0F;
+    const float uu = u0 + (u1 - u0) * f;
     const float xx = f;
     emit_quad_uv(m, t, xx, 0, -kTh, xx, 0, 0, xx, 1, 0, xx, 1, -kTh, bright, bright, bright,
                  uu, v1, uu, v1, uu, v0, uu, v0);
     emit_quad_uv(m, t, xx + 1.0F / 16.0F, 1, -kTh, xx + 1.0F / 16.0F, 1, 0, xx + 1.0F / 16.0F,
                  0, 0, xx + 1.0F / 16.0F, 0, -kTh, bright, bright, bright, uu, v0, uu, v0, uu,
                  v1, uu, v1);
-    const float vv = v1 + (v0 - v1) * f - 0.001953125F;
+    const float vv = v1 + (v0 - v1) * f;
     const float yy = f + 1.0F / 16.0F;
     emit_quad_uv(m, t, 0, yy, 0, 1, yy, 0, 1, yy, -kTh, 0, yy, -kTh, bright, bright, bright,
                  u0, vv, u1, vv, u1, vv, u0, vv);
