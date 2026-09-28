@@ -1098,9 +1098,10 @@ int main(int argc, char** argv) {
               const char* face = dir == 0 ? "S" : (dir == 1 ? "W" : (dir == 2 ? "N" : "E"));
               char buf[192];
               std::snprintf(buf, sizeof buf,
-                            "pos %.1f %.1f %.1f face %s (%.0f) onGround %d hp %d sprint %d tps %.1f",
+                            "pos %.1f %.1f %.1f face %s (%.0f) onGround %d hp %d sprint %d tg %d tps %.1f",
                             player.pos_x, player.pos_y, player.pos_z, face, game->yaw,
                             (int)player.on_ground, player.health, (int)player.is_sprinting(),
+                            player.sprint_toggle_timer,
                             game->tps_ticks / (game->tps_window > 0.0 ? game->tps_window : 1.0));
               craftpp::log_info(buf);
               game->tps_window = 0.0;
