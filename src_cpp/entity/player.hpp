@@ -205,6 +205,13 @@ class Player : public Living, public world::edit::Breaker, public ItemUser {
   void damage_armor(int amount);  // M5 (armor durability)
   void move_entity_with_heading(float strafe, float forward) override;
   void add_movement_stat(double dx, double dy, double dz);
+  // EntityPlayer.swingItem (digestion always 6: no haste/fatigue potions).
+  void swing_item() {
+    if (!is_swinging || swing_int >= 3 || swing_int < 0) {
+      swing_int = -1;
+      is_swinging = true;
+    }
+  }
 
  protected:
   void jump() override {

@@ -146,6 +146,7 @@ void Player::damage_entity(DamageSource src, int amount) {
 }
 
 void Player::attack_target(Entity& target) {
+  swing_item();
   int dmg = inventory.damage_vs();
   // DamageBoost/Weakness potions: none in M4. Sharpness/Knockback/FireAspect
   // enchantments: none in M4 (helpers would read empty enchant tags).

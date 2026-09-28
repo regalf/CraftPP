@@ -3,6 +3,7 @@
 // Title flow (GuiScreen ports): Main -> Select/Create/Multi/Options,
 // in-game ESC menu, death screen. Worlds live in saves/<Folder>/.
 // Usage: ./craftpp [--assets DIR] [--seed N] [--save DIR] [--screenshot f.png]
+// [--shot-frames N] [--view 0|1|2] (F5 cycles views in game)
 // --save/--seed boot straight into the game (headless friendly).
 
 #include <chrono>
@@ -39,6 +40,7 @@
 #include "gui/lang.hpp"
 #include "gui/screens.hpp"
 #include "render/drop.hpp"
+#include "render/firstperson.hpp"
 #include "render/texture_fx.hpp"
 #include "render/frustum.hpp"
 #include "render/mesher.hpp"
@@ -191,6 +193,7 @@ struct Args {
   std::string screenshot;
   int shot_frames = 5;
   std::int64_t seed = 1;
+  int view = 0;  // debug: start in third-person view 1/2 (F5 cycles in game)
 };
 
 Args parse_args(int argc, char** argv) {
@@ -206,6 +209,8 @@ Args parse_args(int argc, char** argv) {
       a.screenshot = argv[++i];
     } else if (std::strcmp(argv[i], "--shot-frames") == 0 && i + 1 < argc) {
       a.shot_frames = std::atoi(argv[++i]);
+    } else if (std::strcmp(argv[i], "--view") == 0 && i + 1 < argc) {
+      a.view = std::atoi(argv[++i]);
     }
   }
   return a;
@@ -288,6 +293,11 @@ struct Session {
   bool have_mouse = false;
   bool lmb_was = false, rmb_was = false, g_was = false, esc_was = false;
   bool w_was = false, space_was = false;  // edge latches for tap detectors
+  bool f5_was = false;
+  int third_person = 0;  // 0 first, 1 third-back, 2 third-front (F5 cycles)
+  // First-person equip animation (updateEquippedItem, per frame).
+  float equip_cur = 1.0F;
+  int equip_slot = -1, equip_id = 0, equip_damage = 0;
   double accumulator = 0.0;
   int tick_count = 0;
   double tps_window = 0.0;
@@ -347,7 +357,7 @@ int main(int argc, char** argv) {
   int exit_code = 0;
   {
     craftpp::render::Texture atlas, pig_tex, zombie_tex, gui_tex, icons_tex, font_tex, items_tex,
-        bg_tex, logo_tex, water_tex;
+        bg_tex, logo_tex, water_tex, char_tex;
     craftpp::render::Image atlas_img;  // retained for TextureFX tile uploads
     craftpp::render::FluidTextureFx fx_water(craftpp::render::FluidTextureFx::Kind::Water),
         fx_water_flow(craftpp::render::FluidTextureFx::Kind::WaterFlow),
@@ -374,6 +384,7 @@ int main(int argc, char** argv) {
     must_load("/gui/background.png", bg_tex);
     must_load("/title/mclogo.png", logo_tex);
     must_load("/gui/items.png", items_tex);
+    must_load("/mob/char.png", char_tex, 64, 32);
     {
       // Water overlay (ItemRenderer /misc/water.png): optional, tiled, so
       // REPEAT wrap. Missing file only disables the overlay.
@@ -542,6 +553,7 @@ int main(int argc, char** argv) {
       session->pending_mode = mode_idx;
       session->pending_hardcore = hardcore;
       session->pending_info = info;
+      session->third_person = args.view >= 0 && args.view <= 2 ? args.view : 0;
       game = std::move(session);
       ui.loading_title =
           info.has_value() ? "Loading level" : "Generating level";  // (lang has no key)
@@ -1077,6 +1089,12 @@ int main(int argc, char** argv) {
               }
             }
             game->g_was = g_now;
+            const bool f5_now = glfwGetKey(window, GLFW_KEY_F5) == GLFW_PRESS;
+            if (f5_now && !game->f5_was) {
+              game->third_person = (game->third_person + 1) % 3;
+              craftpp::log_info("perspective: first/third-back/third-front");
+            }
+            game->f5_was = f5_now;
             for (int k = 0; k < 9; ++k) {
               if (glfwGetKey(window, GLFW_KEY_1 + k) == GLFW_PRESS)
                 player.inventory.current = k;
@@ -1146,7 +1164,68 @@ int main(int argc, char** argv) {
                       lerp_pos(player.prev_pos_y, player.pos_y, alpha) + 0.12,
                       lerp_pos(player.prev_pos_z, player.pos_z, alpha));
         glm::vec3 look(-std::sin(yr) * std::cos(pr), -std::sin(pr), std::cos(yr) * std::cos(pr));
-        glm::mat4 view = glm::lookAt(eye, eye + look, glm::vec3(0.0F, 1.0F, 0.0F));
+        glm::vec3 cam = eye;
+        glm::vec3 cam_look = look;
+        if (game->third_person > 0) {
+          // orientCamera: pull back 4.0 along the view dir (front view uses
+          // the point-reflected offset), clipped by an 8-ray ABCD probe.
+          const bool front = game->third_person == 2;
+          const float pyaw = game->yaw, ppitch = front ? game->pitch + 180.0F : game->pitch;
+          const float pyr = pyaw * 3.14159265F / 180.0F;
+          const float ppr = ppitch * 3.14159265F / 180.0F;
+          glm::vec3 off(-std::sin(pyr) * std::cos(ppr), -std::sin(ppr), std::cos(pyr) * std::cos(ppr));
+          float dist = 4.0F;
+          for (int k = 0; k < 8; ++k) {
+            const float ox = ((k & 1) * 2 - 1) * 0.1F;
+            const float oy = (((k >> 1) & 1) * 2 - 1) * 0.1F;
+            const float oz = (((k >> 2) & 1) * 2 - 1) * 0.1F;
+            const double sx = eye.x + ox, sy = eye.y + oy, sz = eye.z + oz;
+            const double ex = sx - off.x * 4.0 + ox + oz;
+            const double ey2 = sy - off.y * 4.0 + oy;
+            const double ez = sz - off.z * 4.0 + oz;
+            const double len =
+                std::sqrt((ex - sx) * (ex - sx) + (ey2 - sy) * (ey2 - sy) + (ez - sz) * (ez - sz));
+            if (len < 1e-9) continue;
+            int hx = 0, hy = 0, hz = 0, side = 0;
+            if (pick_block(world, sx, sy, sz, (ex - sx) / len, (ey2 - sy) / len, (ez - sz) / len,
+                           4.0, hx, hy, hz, side)) {
+              // Exact hit distance via the picked cell's selection boxes.
+              craftpp::world::BlockCollider collider;
+              std::vector<craftpp::Aabb> boxes;
+              collider.selection_boxes(world.block_id(hx, hy, hz), world.block_meta(hx, hy, hz),
+                                       hx, hy, hz, world, boxes);
+              const craftpp::Vec3 from(sx, sy, sz);
+              const craftpp::Vec3 to(ex, ey2, ez);
+              for (const auto& b : boxes) {
+                if (auto hit = b.clip(from, to)) {
+                  const double d = std::sqrt(from.square_distance_to(hit->hit));
+                  if (d < dist) dist = static_cast<float>(d);
+                }
+              }
+            }
+          }
+          cam = eye - off * dist;
+          if (front) cam_look = -look;
+        }
+        glm::mat4 view = glm::lookAt(cam, cam + cam_look, glm::vec3(0.0F, 1.0F, 0.0F));
+        // setupViewBobbing (all views): walk-cycle sway + camera lean.
+        {
+          const float walked =
+              -(lerp_pos(player.prev_distance_walked, player.distance_walked, alpha));
+          const float cyaw = lerp_angle(player.prev_camera_yaw, player.camera_yaw, alpha);
+          const float cpitch = lerp_angle(player.prev_camera_pitch, player.camera_pitch, alpha);
+          constexpr float kPi = 3.14159265F;
+          const float t = std::sin(walked * kPi) * cyaw * 0.5F;
+          const float u = -std::abs(std::cos(walked * kPi) * cyaw);
+          const float roll = std::sin(walked * kPi) * cyaw * 3.0F;
+          const float tilt =
+              std::abs(std::cos(walked * kPi - 0.2F) * cyaw) * 5.0F + cpitch;
+          glm::mat4 bob(1.0F);
+          bob = glm::translate(bob, glm::vec3(t, u, 0.0F));
+          bob = glm::rotate(bob, glm::radians(roll), glm::vec3(0.0F, 0.0F, 1.0F));
+          bob = glm::rotate(bob, glm::radians(tilt), glm::vec3(1.0F, 0.0F, 0.0F));
+          view = bob * view;
+        }
         glm::mat4 proj =
             glm::perspective(glm::radians(ui.fov), static_cast<float>(w) / h, 0.1F, 256.0F);
         glm::mat4 vp = proj * view;
@@ -1268,6 +1347,56 @@ int main(int argc, char** argv) {
         }
         glEnable(GL_CULL_FACE);
 
+        // Third-person player model (RenderPlayer, char.png).
+        if (game->third_person > 0) {
+          const float body_yaw =
+              lerp_angle(player.prev_render_yaw_offset, player.render_yaw_offset, alpha);
+          const float head_yaw = lerp_angle(body_yaw, game->yaw, 1.0);
+          float sw = player.swing - player.prev_swing;
+          if (sw < 0.0F) sw += 1.0F;
+          const float swing_p = player.prev_swing + sw * static_cast<float>(alpha);
+          auto* held_pl = player.inventory.held();
+          const bool has_held =
+              held_pl != nullptr && held_pl->has_value() && held_pl->value().stack_size > 0;
+          const float feet_y = static_cast<float>(lerp_pos(player.prev_pos_y, player.pos_y, alpha)) -
+                               1.62F;
+          float roll = 0.0F;
+          if (player.death_time > 0) {
+            float t = (static_cast<float>(player.death_time) + static_cast<float>(alpha) - 1.0F) /
+                      20.0F * 1.6F;
+            if (t < 0.0F) t = 0.0F;
+            t = std::sqrt(t);
+            if (t > 1.0F) t = 1.0F;
+            roll = t * 90.0F;
+          }
+          auto parts = craftpp::render::player_parts(
+              lerp_pos(player.prev_limb_phase, player.limb_phase, alpha),
+              lerp_pos(player.prev_limb_speed, player.limb_speed, alpha), swing_p, head_yaw,
+              game->pitch, player.ticks_existed, player.is_sneaking(), has_held ? 1 : 0);
+          auto mesh = craftpp::render::entity_mesh(parts, 64, 32, 180.0F - body_yaw, 1.0F,
+                                                   15.0F / 16.0F, roll);
+          const float mx = static_cast<float>(lerp_pos(player.prev_pos_x, player.pos_x, alpha));
+          const float mz = static_cast<float>(lerp_pos(player.prev_pos_z, player.pos_z, alpha));
+          for (auto& v : mesh.vertices) {
+            v.x += mx;
+            v.y += feet_y;
+            v.z += mz;
+          }
+          terrain_prog.use();
+          terrain_prog.set_mat4(t_mvp, &vp[0][0]);
+          terrain_prog.set_mat4(t_view, &view[0][0]);
+          terrain_prog.set_float(t_fog_start, fog_start);
+          terrain_prog.set_float(t_fog_end, fog_end);
+          terrain_prog.set_vec3(t_fog_color, fog_r, fog_g, fog_b);
+          terrain_prog.set_int(t_tex, 0);
+          char_tex.bind(0);
+          glDisable(GL_CULL_FACE);
+          craftpp::render::Tessellator ptess;
+          ptess.upload(mesh);
+          ptess.draw();
+          glEnable(GL_CULL_FACE);
+        }
+
         // Textured drops (RenderItem.doRenderItem): atlas mini-cubes and
         // icon billboards with bob/spin, drawn before the fluid pass.
         {
@@ -1306,6 +1435,70 @@ int main(int argc, char** argv) {
             craftpp::render::Tessellator dtess;
             dtess.upload(dm.items);
             dtess.draw();
+          }
+        }
+
+        // First-person hand + held item (ItemRenderer, fullbright).
+        if (game->third_person == 0) {
+          auto* held = player.inventory.held();
+          int held_id = 0, held_damage = 0;
+          if (held != nullptr && held->has_value() && held->value().stack_size > 0) {
+            held_id = held->value().item_id;
+            held_damage = held->value().damage;
+          }
+          const int slot = player.inventory.current;
+          const bool same = (game->equip_slot == slot && game->equip_id == held_id &&
+                             game->equip_damage == held_damage);
+          game->equip_slot = slot;
+          game->equip_id = held_id;
+          game->equip_damage = held_damage;
+          const float target = same ? 1.0F : 0.0F;
+          float de = target - game->equip_cur;
+          if (de < -0.4F) de = -0.4F;
+          if (de > 0.4F) de = 0.4F;
+          game->equip_cur += de;
+          float hsw = player.swing - player.prev_swing;
+          if (hsw < 0.0F) hsw += 1.0F;
+          const float swing_p = player.prev_swing + hsw * static_cast<float>(alpha);
+          craftpp::render::FirstPersonMeshes fm;
+          craftpp::render::build_first_person(fm, held_id, held_damage, game->equip_cur, swing_p);
+          // The chain is camera-space: map to world via the inverse view
+          // (exact bob included) before drawing with the world MVP.
+          {
+            const glm::mat4 inv = glm::inverse(view);
+            for (auto* mm : {&fm.atlas, &fm.items, &fm.skin}) {
+              for (auto& v : mm->vertices) {
+                const glm::vec4 w = inv * glm::vec4(v.x, v.y, v.z, 1.0F);
+                v.x = w.x;
+                v.y = w.y;
+                v.z = w.z;
+              }
+            }
+          }
+          terrain_prog.use();
+          terrain_prog.set_mat4(t_mvp, &vp[0][0]);
+          terrain_prog.set_mat4(t_view, &view[0][0]);
+          terrain_prog.set_float(t_fog_start, fog_start);
+          terrain_prog.set_float(t_fog_end, fog_end);
+          terrain_prog.set_vec3(t_fog_color, fog_r, fog_g, fog_b);
+          terrain_prog.set_int(t_tex, 0);
+          if (!fm.atlas.vertices.empty()) {
+            atlas.bind(0);
+            craftpp::render::Tessellator ftess;
+            ftess.upload(fm.atlas);
+            ftess.draw();
+          }
+          if (!fm.items.vertices.empty()) {
+            items_tex.bind(0);
+            craftpp::render::Tessellator ftess;
+            ftess.upload(fm.items);
+            ftess.draw();
+          }
+          if (!fm.skin.vertices.empty()) {
+            char_tex.bind(0);
+            craftpp::render::Tessellator ftess;
+            ftess.upload(fm.skin);
+            ftess.draw();
           }
         }
 

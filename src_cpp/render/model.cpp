@@ -77,19 +77,24 @@ Mesh build_model(const std::vector<ModelPart>& parts, int tex_w, int tex_h, floa
 }
 
 Mesh entity_mesh(const std::vector<ModelPart>& parts, int tex_w, int tex_h, float yaw_deg,
-                 float brightness) {
+                 float brightness, float model_scale, float roll_deg) {
   Mesh m = build_model(parts, tex_w, tex_h, brightness);
   constexpr float kScale = 1.0F / 16.0F;
   const float yr = yaw_deg * 3.14159265F / 180.0F;
   const float c = std::cos(yr), s = std::sin(yr);
+  const float rr = roll_deg * 3.14159265F / 180.0F;
+  const float rc = std::cos(rr), rs = std::sin(rr);
   for (Vertex& v : m.vertices) {
-    // Mirror X + ground at 24.125 (RenderLiving pair), then yaw about Y.
-    const float lx = -v.x * kScale;
-    const float ly = (24.125F - v.y) * kScale;
-    const float lz = v.z * kScale;
-    v.x = lx * c + lz * s;
-    v.y = ly;
-    v.z = -lx * s + lz * c;
+    // Model-unit scale, mirror X + ground at 24.125 (RenderLiving pair),
+    // death roll about the feet, then yaw about Y.
+    const float lx = -v.x * model_scale * kScale;
+    const float ly = (24.125F - v.y * model_scale) * kScale;
+    const float lz = v.z * model_scale * kScale;
+    const float qx = lx * rc - ly * rs;
+    const float qy = lx * rs + ly * rc;
+    v.x = qx * c + lz * s;
+    v.y = qy;
+    v.z = -qx * s + lz * c;
   }
   return m;
 }
@@ -128,6 +133,99 @@ std::vector<ModelPart> pig_parts(float limb_swing, float swing_amount, float hea
   parts.push_back(part(3, 24 - leg_h, 7, w2, 0, 0, 0, 16, -2, 0, -2, 4, leg_h, 4));
   parts.push_back(part(-3, 24 - leg_h, -5, w2, 0, 0, 0, 16, -2, 0, -2, 4, leg_h, 4));
   parts.push_back(part(3, 24 - leg_h, -5, w1, 0, 0, 0, 16, -2, 0, -2, 4, leg_h, 4));
+  return parts;
+}
+
+std::vector<ModelPart> player_parts(float limb_swing, float swing_amount, float attack_t,
+                                    float head_yaw_deg, float head_pitch_deg, int age_ticks,
+                                    bool sneaking, int held_pose) {
+  constexpr float kPi = 3.14159265F;
+  const float t = static_cast<float>(age_ticks);
+  const float head_ry = head_yaw_deg * kDeg;
+  const float head_rx = head_pitch_deg * kDeg;
+  float arm_r_rx = std::cos(limb_swing * 0.6662F + kPi) * 2.0F * swing_amount * 0.5F;
+  float arm_l_rx = std::cos(limb_swing * 0.6662F) * 2.0F * swing_amount * 0.5F;
+  float arm_r_ry = 0.0F, arm_l_ry = 0.0F;
+  float arm_r_px = -5.0F, arm_l_px = 5.0F, arm_r_pz = 0.0F, arm_l_pz = 0.0F;
+  float leg_r_rx = std::cos(limb_swing * 0.6662F) * 1.4F * swing_amount;
+  float leg_l_rx = std::cos(limb_swing * 0.6662F + kPi) * 1.4F * swing_amount;
+  if (held_pose != 0) {
+    arm_l_rx = arm_l_rx * 0.5F - kPi * 0.1F * held_pose;
+    arm_r_rx = arm_r_rx * 0.5F - kPi * 0.1F * held_pose;
+  }
+  if (attack_t > 0.0F) {
+    // Attack body-twist (onGround swing block; identity at 0).
+    const float body_ry = std::sin(std::sqrt(attack_t) * kPi * 2.0F) * 0.2F;
+    arm_r_pz = std::sin(body_ry) * 5.0F;
+    arm_r_px = -std::cos(body_ry) * 5.0F;
+    arm_l_pz = -std::sin(body_ry) * 5.0F;
+    arm_l_px = std::cos(body_ry) * 5.0F;
+    arm_r_ry += body_ry;
+    arm_l_ry += body_ry;
+    arm_l_rx += body_ry;
+    float w = 1.0F - attack_t;
+    w *= w;
+    w *= w;
+    w = 1.0F - w;
+    const float s = std::sin(w * kPi);
+    const float w2 = std::sin(attack_t * kPi) * -(head_rx - 0.7F) * 0.75F;
+    arm_r_rx -= (s * 1.2F + w2);
+    arm_r_ry += body_ry * 2.0F;
+    float arm_r_rz = std::sin(attack_t * kPi) * -0.4F;
+    const float sway = std::cos(t * 0.09F) * 0.05F + 0.05F;
+    const float bob = std::sin(t * 0.067F) * 0.05F;
+    std::vector<ModelPart> parts;
+    parts.push_back(part(0, sneaking ? 1.0F : 0.0F, 0, head_rx, head_ry, 0, 0, 0, -4, -8, -4, 8,
+                         8, 8));
+    parts.push_back(
+        part(0, sneaking ? 1.0F : 0.0F, 0, head_rx, head_ry, 0, 32, 0, -4, -8, -4, 8, 8, 8));
+    parts.back().boxes[0].expand = 0.5F;
+    parts.push_back(
+        part(0, 0, 0, sneaking ? 0.5F : 0.0F, body_ry, 0, 16, 16, -4, 0, -2, 8, 12, 4));
+    parts.push_back(part(arm_r_px, 2, arm_r_pz, arm_r_rx + bob, arm_r_ry, arm_r_rz + sway, 40, 16,
+                         -3, -2, -2, 4, 12, 4));
+    parts.push_back(part(arm_l_px, 2, arm_l_pz, arm_l_rx - bob, arm_l_ry, -sway, 40, 16, -1, -2,
+                         -2, 4, 12, 4));
+    parts.back().boxes[0].mirror = true;
+    if (sneaking) {
+      parts.push_back(part(-2, 9, 4, leg_r_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+      parts.push_back(part(2, 9, 4, leg_l_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+    } else {
+      parts.push_back(part(-2, 12, 0, leg_r_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+      parts.push_back(part(2, 12, 0, leg_l_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+    }
+    parts.back().boxes[0].mirror = true;
+    if (sneaking) {
+      parts[2].rx += 0.4F;
+      parts[3].rx += 0.4F;
+    }
+    return parts;
+  }
+  const float sway = std::cos(t * 0.09F) * 0.05F + 0.05F;
+  const float bob = std::sin(t * 0.067F) * 0.05F;
+  std::vector<ModelPart> parts;
+  parts.push_back(part(0, sneaking ? 1.0F : 0.0F, 0, head_rx, head_ry, 0, 0, 0, -4, -8, -4, 8,
+                       8, 8));
+  parts.push_back(part(0, sneaking ? 1.0F : 0.0F, 0, head_rx, head_ry, 0, 32, 0, -4, -8, -4, 8, 8,
+                       8));
+  parts.back().boxes[0].expand = 0.5F;
+  parts.push_back(part(0, 0, 0, sneaking ? 0.5F : 0.0F, 0, 0, 16, 16, -4, 0, -2, 8, 12, 4));
+  parts.push_back(
+      part(-5, 2, 0, arm_r_rx + bob, 0, sway, 40, 16, -3, -2, -2, 4, 12, 4));
+  parts.push_back(part(5, 2, 0, arm_l_rx - bob, 0, -sway, 40, 16, -1, -2, -2, 4, 12, 4));
+  parts.back().boxes[0].mirror = true;
+  if (sneaking) {
+    parts.push_back(part(-2, 9, 4, leg_r_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+    parts.push_back(part(2, 9, 4, leg_l_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+  } else {
+    parts.push_back(part(-2, 12, 0, leg_r_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+    parts.push_back(part(2, 12, 0, leg_l_rx, 0, 0, 0, 16, -2, 0, -2, 4, 12, 4));
+  }
+  parts.back().boxes[0].mirror = true;
+  if (sneaking) {
+    parts[3].rx += 0.4F;
+    parts[4].rx += 0.4F;
+  }
   return parts;
 }
 

@@ -39,8 +39,11 @@ Mesh build_model(const std::vector<ModelPart>& parts, int tex_w, int tex_h, floa
 // glScalef(-1,-1,1) + glTranslatef(0, -24/16 - 0.0078125, 0) pair),
 // yaw-rotated by yaw_deg about Y. Culling should be off (the mirror flips
 // winding, like the source which relies on display-list state).
+// model_scale scales model units first (players render at 15/16 via
+// renderPlayerScale); roll_deg applies a Z roll about the feet afterwards
+// (death fall-over via rotateCorpse).
 Mesh entity_mesh(const std::vector<ModelPart>& parts, int tex_w, int tex_h, float yaw_deg,
-                 float brightness);
+                 float brightness, float model_scale = 1.0F, float roll_deg = 0.0F);
 
 // Pig (ModelPig/ModelQuadruped, leg height 6): walk phase + head look.
 std::vector<ModelPart> pig_parts(float limb_swing, float swing_amount, float head_yaw_deg,
@@ -48,5 +51,11 @@ std::vector<ModelPart> pig_parts(float limb_swing, float swing_amount, float hea
 // Zombie (ModelZombie/ModelBiped): walk + attack swing + idle sway.
 std::vector<ModelPart> zombie_parts(float limb_swing, float swing_amount, float attack_t,
                                     int age_ticks, float head_yaw_deg, float head_pitch_deg);
+// Player (ModelBiped on char.png): walk, head look, sneak pose, held-item
+// arm pose, attack swing (onGround 0..1), idle sway. field_40333_u (bow
+// aim) needs the item-use state machine (M5 leftover): not modeled.
+std::vector<ModelPart> player_parts(float limb_swing, float swing_amount, float attack_t,
+                                    float head_yaw_deg, float head_pitch_deg, int age_ticks,
+                                    bool sneaking, int held_pose);
 
 }  // namespace craftpp::render

@@ -75,6 +75,7 @@ bool Controller::send_block_removed(int x, int y, int z, int side) {
 }
 
 void ControllerSP::click_block(int x, int y, int z, int side) {
+  p.swing_item();
   block_hit(w, x, y, z, side);
   const int id = w.block_id(x, y, z);
   if (id > 0 && cur_damage_ == 0.0f) block_clicked(w, p, x, y, z);
@@ -91,6 +92,7 @@ void ControllerSP::send_block_removing(int x, int y, int z, int side) {
   if (x == cur_x && y == cur_y && z == cur_z) {
     const int id = w.block_id(x, y, z);
     if (id == 0) return;
+    p.swing_item();  // digging swings continuously (halfway restart rule)
     cur_damage_ += p.strength_vs_block(id);
     if (static_cast<int>(hit_ticks_) % 4 == 0) {
       // Dig sound hook (M6 audio): no RNG, deterministic params.
@@ -184,6 +186,7 @@ void ControllerCreative::disable_creative(Player& player) {
 }
 
 void ControllerCreative::click_block(int x, int y, int z, int side) {
+  p.swing_item();
   block_hit(w, x, y, z, side);
   send_block_removed(x, y, z, side);
   break_countdown_ = 5;
