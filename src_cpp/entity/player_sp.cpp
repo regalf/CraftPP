@@ -135,13 +135,6 @@ void PlayerSP::on_living_update() {
   push_out_of_blocks(pos_x + width * 0.35, bbox.min_y + 0.5, pos_z + width * 0.35);
 
   const bool can_sprint = static_cast<float>(food_level()) > 6.0f;
-  // TEMP-DEBUG (sprint diagnosis): log trigger evaluations with W pressed.
-  if (std::getenv("SPRINT_DEBUG") != nullptr && movement_input->move_forward >= kSprintFwd) {
-    std::fprintf(stderr, "SPRINT g=%d stale=%d fresh=%.1f tog=%d sprint=%d food=%d use=%d collH=%d\n",
-                 (int)on_ground, (int)wants_sprint_fwd, movement_input->move_forward,
-                 sprint_toggle_timer, (int)is_sprinting(), (int)can_sprint, (int)is_using_item(),
-                 (int)collided_horizontally);
-  }
   if (on_ground && !wants_sprint_fwd && movement_input->move_forward >= kSprintFwd &&
       !is_sprinting() && can_sprint && !is_using_item()) {
     if (sprint_toggle_timer == 0) {
