@@ -447,8 +447,10 @@ int main(int argc, char** argv) {
       if (player.is_dead) {
         for (auto& s : player.inventory.main) {
           if (s.has_value() && s->stack_size > 0) {
+            double mx = 0.0, my = 0.0, mz = 0.0;
+            craftpp::entity::DroppedItem::spawn_pop(&world, mx, my, mz);
             world.on_item_drop(s->item_id, s->stack_size, s->damage, player.pos_x, player.pos_y + 1.0,
-                               player.pos_z, 0.0, 0.0, 0.0);
+                               player.pos_z, mx, my, mz);
           }
           s = std::nullopt;
         }

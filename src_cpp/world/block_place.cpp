@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "core/math_helper.hpp"
+#include "entity/drops.hpp"
 #include "world/blocks.hpp"
 #include "world/fluid.hpp"
 
@@ -908,9 +909,11 @@ void drop_one(EditWorld& w, int x, int y, int z, int item_id, int count, int dam
   const double px = x + r.next_float() * kSpread + (1.0f - kSpread) * 0.5;
   const double py = y + r.next_float() * kSpread + (1.0f - kSpread) * 0.5;
   const double pz = z + r.next_float() * kSpread + (1.0f - kSpread) * 0.5;
-  // EntityItem motion/yaw use global Math.random (wild in the source too);
-  // the hook records zeros there (position is the deterministic part).
-  w.on_item_drop(item_id, count, damage, px, py, pz, 0.0, 0.0, 0.0);
+  // EntityItem spawn motion (visual pop-out of the hole; wild Math.random
+  // in the source, pinned draws here — never asserted, no gameplay effect).
+  double mx = 0.0, my = 0.0, mz = 0.0;
+  entity::DroppedItem::spawn_pop(&w, mx, my, mz);
+  w.on_item_drop(item_id, count, damage, px, py, pz, mx, my, mz);
 }
 
 // Block id dropped (idDropped), -1/0 = nothing.

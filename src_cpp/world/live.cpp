@@ -283,8 +283,10 @@ void LiveWorld::set_raw(int x, int y, int z, int id, int meta) {
       if (auto* chest = dynamic_cast<tile::ChestEntity*>(it->second.get())) {
         for (auto& s : chest->items) {
           if (s.has_value() && s->stack_size > 0) {
-            on_item_drop(s->item_id, s->stack_size, s->damage, x + 0.5, y + 0.5, z + 0.5, 0, 0,
-                         0);
+            double mx = 0.0, my = 0.0, mz = 0.0;
+            entity::DroppedItem::spawn_pop(this, mx, my, mz);
+            on_item_drop(s->item_id, s->stack_size, s->damage, x + 0.5, y + 0.5, z + 0.5, mx, my,
+                         mz);
           }
         }
       }

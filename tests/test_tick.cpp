@@ -1,4 +1,5 @@
 // Day/night math + random block ticks (grass/leaves/ice/fire).
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include "world/block_place.hpp"
@@ -242,4 +243,18 @@ TEST_CASE("snow drops one snowball", "[tick]") {
   craftpp::JavaRandom r(3L);
   CHECK(edit::drop_count(bid::kSnowCover, r) == 1);
   CHECK(edit::drop_id(bid::kSnowCover, 0, r, 0) == 332);
+}
+
+TEST_CASE("mined drops pop out with EntityItem motion", "[tick]") {
+  auto w = flat_world();
+  edit::drop_as_item(w, 8, 65, 8, bid::kDirt, 0, 0);
+  REQUIRE(!w.items().empty());
+  const auto& it = w.items()[0];
+  CHECK(it->motion_y == Catch::Approx(0.2));
+  CHECK(std::abs(it->motion_x) <= 0.1);
+  CHECK(std::abs(it->motion_z) <= 0.1);
+  // Arc: after a few ticks the drop is above its rest height, visible.
+  const double y0 = it->pos_y;
+  for (int i = 0; i < 4; ++i) w.tick();
+  CHECK(w.items()[0]->pos_y > y0);
 }

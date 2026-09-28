@@ -80,6 +80,15 @@ class DroppedItem : public Entity {
     if (health <= 0) set_entity_dead();
   }
 
+  // Vanilla EntityItem spawn pop (visual arc out of the mined block/mob).
+  // Wild Math.random in the source; pinned draws here (never asserted).
+  static void spawn_pop(EntityWorld* w, double& mx, double& my, double& mz) {
+    JavaRandom& r = w->world_rand();
+    mx = (r.next_float() - 0.5) * 0.2;
+    my = 0.2;
+    mz = (r.next_float() - 0.5) * 0.2;
+  }
+
  private:
   static int floor_int(double v) {
     const int i = static_cast<int>(v);
