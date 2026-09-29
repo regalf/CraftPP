@@ -1549,10 +1549,7 @@ int main(int argc, char** argv) {
           if (hsw < 0.0F) hsw += 1.0F;
           const float swing_p = player.prev_swing + hsw * static_cast<float>(alpha);
           craftpp::render::FirstPersonMeshes fm;
-          craftpp::render::build_first_person(
-              fm, held_id, held_damage,
-              game->equip_prev + (game->equip_cur - game->equip_prev) * static_cast<float>(alpha),
-              swing_p);
+          craftpp::render::build_first_person(fm, held_id, held_damage, game->equip_cur, swing_p);
           // The chain is camera-space: map to world via the inverse view
           // (exact bob included) before drawing with the world MVP.
           {
