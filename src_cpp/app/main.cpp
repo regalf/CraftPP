@@ -1162,8 +1162,8 @@ int main(int argc, char** argv) {
               const float etarget = esame ? 1.0F : 0.0F;
               game->equip_prev = game->equip_cur;
               float ede = etarget - game->equip_cur;
-              if (ede < -0.25F) ede = -0.25F;
-              if (ede > 0.25F) ede = 0.25F;
+              if (ede < -0.5F) ede = -0.5F;
+              if (ede > 0.5F) ede = 0.5F;
               game->equip_cur += ede;
               if (game->equip_cur < 0.1F) {
                 game->equip_slot = eslot;
@@ -1549,7 +1549,10 @@ int main(int argc, char** argv) {
           if (hsw < 0.0F) hsw += 1.0F;
           const float swing_p = player.prev_swing + hsw * static_cast<float>(alpha);
           craftpp::render::FirstPersonMeshes fm;
-          craftpp::render::build_first_person(fm, held_id, held_damage, game->equip_cur, swing_p);
+          craftpp::render::build_first_person(
+              fm, held_id, held_damage,
+              game->equip_prev + (game->equip_cur - game->equip_prev) * static_cast<float>(alpha),
+              swing_p);
           // The chain is camera-space: map to world via the inverse view
           // (exact bob included) before drawing with the world MVP.
           {
