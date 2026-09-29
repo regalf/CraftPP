@@ -1137,6 +1137,29 @@ int main(int argc, char** argv) {
 
             world.tick();
             if (!game->creative) game->csp->update_controller();
+            // Equip animation runs on game ticks (4 ticks full traverse):
+            // vanilla advances it per render frame (instant at high fps),
+            // here it stays visible and matches the 4-tick place rhythm.
+            {
+              auto* held_eq = player.inventory.held();
+              int eid = 0, edmg = 0;
+              if (held_eq != nullptr && held_eq->has_value() &&
+                  held_eq->value().stack_size > 0) {
+                eid = held_eq->value().item_id;
+                edmg = held_eq->value().damage;
+              }
+              const int eslot = player.inventory.current;
+              const bool esame =
+                  (game->equip_slot == eslot && game->equip_id == eid);
+              game->equip_slot = eslot;
+              game->equip_id = eid;
+              game->equip_damage = edmg;
+              const float etarget = esame ? 1.0F : 0.0F;
+              float ede = etarget - game->equip_cur;
+              if (ede < -0.25F) ede = -0.25F;
+              if (ede > 0.25F) ede = 0.25F;
+              game->equip_cur += ede;
+            }
             // Death opens the death screen (no auto-respawn).
             if (player.is_dead && ui.cur == craftpp::gui::Screen::None) {
               ui.score = player.score;
@@ -1504,17 +1527,11 @@ int main(int argc, char** argv) {
           }
           const int slot = player.inventory.current;
           // Same stack worn down (slot+id equal, damage adopted silently):
-          // no re-equip, like the source identity check.
-          const bool same_id =
-              (game->equip_slot == slot && game->equip_id == held_id);
+          // no re-equip, like the source identity check. Progress itself
+          // advances per tick above; render only consumes it here.
           game->equip_slot = slot;
           game->equip_id = held_id;
           game->equip_damage = held_damage;
-          const float target = same_id ? 1.0F : 0.0F;
-          float de = target - game->equip_cur;
-          if (de < -0.4F) de = -0.4F;
-          if (de > 0.4F) de = 0.4F;
-          game->equip_cur += de;
           float hsw = player.swing - player.prev_swing;
           if (hsw < 0.0F) hsw += 1.0F;
           const float swing_p = player.prev_swing + hsw * static_cast<float>(alpha);
