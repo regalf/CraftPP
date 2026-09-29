@@ -1,7 +1,12 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <map>
+
 #include "entity/player.hpp"
 #include "gui/container.hpp"
+#include "gui/containers.hpp"
+#include "gui/font.hpp"
+#include "render/texture.hpp"
 
 using craftpp::entity::Inventory;
 using craftpp::entity::ItemStack;
@@ -223,4 +228,35 @@ TEST_CASE("container close drops cursor and matrix") {
   inv.cursor = std::nullopt;
   k.c.close(inv.cursor, sink.fn());
   REQUIRE(sink.got.size() == 2);  // matrix already cleared
+}
+
+TEST_CASE("container screen draw does not crash") {
+  // CPU-side draw path (meshes only, no GL): panel + slots + cursor +
+  // tooltip for a hovered stack.
+  craftpp::render::Image img;
+  std::string err;
+  REQUIRE(craftpp::render::load_png("assets/font/default.png", img, err));
+  craftpp::gui::Font font;
+  REQUIRE(font.load_glyphs(img.rgba.data(), img.width, img.height));
+  REQUIRE(font.load_allowed("assets/font.txt"));
+  Inventory inv;
+  inv.main[9] = st(351, 3, 1);  // rose red: subtype name override
+  craftpp::gui::OpenGui g;
+  g.kind = craftpp::gui::OpenGui::Kind::Inventory;
+  craftpp::gui::ctn::build_player(g.kit, inv);
+  std::map<std::string, std::string> lang = {{"item.dyePowder.red.name", "Rose Red"}};
+  // Hover the dye slot: panel origin centers 176x166 in 854x480.
+  const float px = (854 - 176) / 2.0F, py = (480 - 166) / 2.0F;
+  const double mx = px + 8 + 0 * 18 + 8, my = py + 84 + 8;
+  auto m = craftpp::gui::draw_open_gui(g, inv, font, lang, mx, my, 854, 480);
+  CHECK(!m.panel.vertices.empty());
+  CHECK(!m.items.vertices.empty());
+  CHECK(!m.text.vertices.empty());  // labels + tooltip
+  CHECK(!m.hl.vertices.empty());    // hover wash + tooltip box
+  // Name keys: base + subtype overrides.
+  CHECK(std::string(craftpp::gui::name_key_for(3, 0)) == "tile.dirt.name");
+  CHECK(std::string(craftpp::gui::name_key_for(351, 1)) == "item.dyePowder.red.name");
+  CHECK(std::string(craftpp::gui::name_key_for(35, 0)) == "tile.cloth.white.name");
+  CHECK(std::string(craftpp::gui::name_key_for(263, 1)) == "item.charcoal.name");
+  CHECK(std::string(craftpp::gui::name_key_for(44, 3)) == "tile.stoneSlab.cobble.name");
 }

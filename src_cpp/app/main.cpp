@@ -16,6 +16,7 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <map>
 #include <memory>
 #include <optional>
@@ -35,6 +36,8 @@
 #include "entity/pig.hpp"
 #include "entity/player_sp.hpp"
 #include "entity/zombie.hpp"
+#include "gui/container.hpp"
+#include "gui/containers.hpp"
 #include "gui/font.hpp"
 #include "gui/hud.hpp"
 #include "gui/lang.hpp"
@@ -154,21 +157,25 @@ constexpr const char* kFlatVert = R"GLSL(
 layout(location = 0) in vec3 in_pos;
 layout(location = 1) in vec3 in_color;
 layout(location = 2) in vec2 in_uv;
+layout(location = 3) in float in_alpha;
 uniform mat4 u_mvp;
 out vec3 v_color;
+out float v_alpha;
 void main() {
   gl_Position = u_mvp * vec4(in_pos, 1.0);
   v_color = in_color;
+  v_alpha = in_alpha;
 }
 )GLSL";
 
 constexpr const char* kFlatFrag = R"GLSL(
 #version 330 core
 in vec3 v_color;
+in float v_alpha;
 uniform float u_bright;
 out vec4 out_color;
 void main() {
-  out_color = vec4(v_color * u_bright, 1.0);
+  out_color = vec4(v_color * u_bright, v_alpha);
 }
 )GLSL";
 
@@ -229,6 +236,7 @@ int g_wheel = 0;
 std::string g_chars;
 bool g_backspace = false;
 bool g_enter = false;
+bool g_inv = false;  // inventory toggle key (E) pressed this frame
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
   (void)window;
@@ -262,6 +270,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
   if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
   if (key == GLFW_KEY_BACKSPACE) g_backspace = true;
   if (key == GLFW_KEY_ENTER || key == GLFW_KEY_KP_ENTER) g_enter = true;
+  if (key == GLFW_KEY_E && action == GLFW_PRESS) g_inv = true;
 }
 
 // Render interpolation (partial tick): entities glide between their
@@ -308,6 +317,9 @@ struct Session {
   float equip_cur = 1.0F;
   float equip_prev = 1.0F;
   int equip_slot = -1, equip_id = 0, equip_damage = 0;
+  // Open container overlay (inventory/crafting/furnace/chest; world ticks on).
+  craftpp::gui::OpenGui gui;
+  bool gui_lmb_down = false, gui_rmb_down = false;
   double accumulator = 0.0;
   int tick_count = 0;
   double tps_window = 0.0;
@@ -368,6 +380,7 @@ int main(int argc, char** argv) {
   {
     craftpp::render::Texture atlas, pig_tex, zombie_tex, gui_tex, icons_tex, font_tex, items_tex,
         bg_tex, logo_tex, water_tex, char_tex;
+    craftpp::render::Texture inv_tex, craft_tex, furn_tex, chest_tex;  // container panels
     craftpp::render::Image atlas_img;  // retained for TextureFX tile uploads
     craftpp::render::FluidTextureFx fx_water(craftpp::render::FluidTextureFx::Kind::Water),
         fx_water_flow(craftpp::render::FluidTextureFx::Kind::WaterFlow),
@@ -394,6 +407,10 @@ int main(int argc, char** argv) {
     must_load("/gui/background.png", bg_tex);
     must_load("/title/mclogo.png", logo_tex);
     must_load("/gui/items.png", items_tex);
+    must_load("/gui/inventory.png", inv_tex);
+    must_load("/gui/crafting.png", craft_tex);
+    must_load("/gui/furnace.png", furn_tex);
+    must_load("/gui/container.png", chest_tex);
     must_load("/mob/char.png", char_tex, 64, 32);
     {
       // Water overlay (ItemRenderer /misc/water.png): optional, tiled, so
@@ -463,10 +480,15 @@ int main(int argc, char** argv) {
     int frames = 0;
     bool screenshotted = false;
     auto set_screen_cursor = [&]() {
+      const bool free_mouse = ui.cur != craftpp::gui::Screen::None ||
+                              (game && craftpp::gui::gui_open(game->gui));
       glfwSetInputMode(window, GLFW_CURSOR,
-                       ui.cur == craftpp::gui::Screen::None ? GLFW_CURSOR_DISABLED
-                                                           : GLFW_CURSOR_NORMAL);
+                       free_mouse ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
     };
+    // Container overlay ops (assigned below; fwd-declared for the loader).
+    std::function<void(craftpp::entity::ItemStack&)> drop_stack;
+    std::function<void(bool)> close_gui;
+    std::function<bool(craftpp::gui::OpenGui::Kind, int, int, int)> open_gui;
 
     std::function<void(const std::string&, long, const std::string&, int, bool)> start_game;
     std::function<void(bool)> stop_to_title;
@@ -685,6 +707,80 @@ int main(int argc, char** argv) {
       game.reset();
       craftpp::gui::open_screen(ui, craftpp::gui::Screen::Main, sctx);
       set_screen_cursor();
+    };
+
+    // ---- container overlay (inventory/crafting/furnace/chest) ----
+    drop_stack = [&](craftpp::entity::ItemStack& s) {
+      if (!game || !game->world || !game->player) return;
+      if (s.stack_size <= 0) return;
+      double mx = 0.0, my = 0.0, mz = 0.0;
+      craftpp::entity::DroppedItem::spawn_pop(game->world.get(), mx, my, mz);
+      game->world->on_item_drop(s.item_id, s.stack_size, s.damage, game->player->pos_x,
+                                game->player->pos_y + 1.0, game->player->pos_z, mx, my, mz);
+    };
+    close_gui = [&](bool drop_contents) {
+      if (!game) return;
+      auto& g = game->gui;
+      if (g.kind == craftpp::gui::OpenGui::Kind::None) return;
+      // Furnace/chest kits have no matrix: close() drops the cursor only.
+      if (drop_contents && game->player) g.kit.c.close(game->player->inventory.cursor, drop_stack);
+      if (game->player) game->player->inventory.cursor = std::nullopt;
+      g = craftpp::gui::OpenGui();
+      game->gui_lmb_down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+      game->gui_rmb_down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+      game->lmb_was = game->gui_lmb_down;
+      game->rmb_was = game->gui_rmb_down;
+      game->rmb_cooldown = 0;
+      set_screen_cursor();
+    };
+    open_gui = [&](craftpp::gui::OpenGui::Kind kind, int bx, int by, int bz) -> bool {
+      if (!game || !game->world || !game->player) return false;
+      close_gui(true);
+      auto& g = game->gui;
+      auto& inv = game->player->inventory;
+      g.kind = kind;
+      g.bx = bx;
+      g.by = by;
+      g.bz = bz;
+      g.x_size = 176;
+      g.y_size = 166;
+      g.tile = nullptr;
+      using K = craftpp::gui::OpenGui::Kind;
+      if (kind == K::Inventory) {
+        craftpp::gui::ctn::build_player(g.kit, inv);
+      } else if (kind == K::Workbench) {
+        craftpp::gui::ctn::build_workbench(g.kit, inv);
+      } else if (kind == K::Furnace || kind == K::Chest) {
+        auto* t = game->world->tile_at(bx, by, bz);
+        if (t == nullptr) {
+          g.kind = K::None;
+          return false;
+        }
+        if (kind == K::Furnace) {
+          auto* f = dynamic_cast<craftpp::world::tile::FurnaceEntity*>(t);
+          if (f == nullptr) {
+            g.kind = K::None;
+            return false;
+          }
+          craftpp::gui::ctn::build_furnace(g.kit, inv, f->items);
+          g.tile = t;
+        } else {
+          auto* ch = dynamic_cast<craftpp::world::tile::ChestEntity*>(t);
+          if (ch == nullptr) {
+            g.kind = K::None;
+            return false;
+          }
+          craftpp::gui::ctn::build_chest(g.kit, inv, ch->items);
+          g.tile = t;
+          g.y_size = 168;
+        }
+      }
+      game->gui_lmb_down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+      game->gui_rmb_down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+      game->lmb_was = game->gui_lmb_down;
+      game->rmb_was = game->gui_rmb_down;
+      set_screen_cursor();
+      return true;
     };
 
     // ---- button dispatch (vanilla ids per screen) ----
@@ -997,6 +1093,7 @@ int main(int argc, char** argv) {
         g_chars.clear();
         g_backspace = false;
         g_enter = false;
+        g_inv = false;
         g_wheel = 0;
       }  // end menu branch
       if (game && ui.cur == craftpp::gui::Screen::None) {
@@ -1004,13 +1101,72 @@ int main(int argc, char** argv) {
         LiveWorld& world = *game->world;
         PlayerSP& player = *game->player;
         if (esc && !game->esc_was) {
-          craftpp::gui::open_screen(ui, craftpp::gui::Screen::Ingame, sctx);
-          set_screen_cursor();
+          if (craftpp::gui::gui_open(game->gui)) {
+            close_gui(true);  // ESC closes the container first (vanilla)
+          } else {
+            craftpp::gui::open_screen(ui, craftpp::gui::Screen::Ingame, sctx);
+            set_screen_cursor();
+          }
         }
         game->esc_was = esc;
         if (ui.cur != craftpp::gui::Screen::None) {
           // (menu opened above: skip game input this frame)
+        } else if (craftpp::gui::gui_open(game->gui)) {
+          // ---- container overlay: world keeps ticking, clicks hit slots ----
+          {
+            auto& g = game->gui;
+            auto& pl = *game->player;
+            using K = craftpp::gui::OpenGui::Kind;
+            if (pl.is_dead) close_gui(true);
+            bool ok = true;
+            const double gdx = pl.pos_x - (g.bx + 0.5), gdy = pl.pos_y - (g.by + 0.5),
+                         gdz = pl.pos_z - (g.bz + 0.5);
+            const double gd2 = gdx * gdx + gdy * gdy + gdz * gdz;
+            if (g.kind == K::Workbench) {
+              ok = world.block_id(g.bx, g.by, g.bz) == craftpp::world::bid::kWorkbench &&
+                   gd2 <= 64.0;
+            } else if (g.kind == K::Furnace || g.kind == K::Chest) {
+              const void* t = static_cast<const void*>(world.tile_at(g.bx, g.by, g.bz));
+              ok = t != nullptr && t == g.tile && gd2 <= 64.0;
+              if (ok && g.kind == K::Furnace) {
+                auto* f = static_cast<craftpp::world::tile::FurnaceEntity*>(
+                    world.tile_at(g.bx, g.by, g.bz));
+                g.burn_scaled = f->current_burn > 0 ? f->burn_time * 12 / f->current_burn : 0;
+                g.cook_scaled = f->cook_time * 24 / 200;
+              }
+            }
+            if (!ok) close_gui(true);
+          }
+          if (craftpp::gui::gui_open(game->gui)) {
+            if (g_inv) {
+              close_gui(true);  // E toggles (keyBindInventory parity)
+            } else {
+              const bool clmb =
+                  glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+              const bool crmb =
+                  glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+              const bool shift =
+                  glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ||
+                  glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+              auto& g = game->gui;
+              auto& pl = *game->player;
+              if (clmb && !game->gui_lmb_down) {
+                const int slot = craftpp::gui::slot_at(g, mx, my);
+                g.kit.c.click(slot, 0, shift, pl.inventory.cursor, drop_stack);
+              }
+              if (crmb && !game->gui_rmb_down) {
+                const int slot = craftpp::gui::slot_at(g, mx, my);
+                g.kit.c.click(slot, 1, shift, pl.inventory.cursor, drop_stack);
+              }
+              game->gui_lmb_down = clmb;
+              game->gui_rmb_down = crmb;
+            }
+          }
         } else {
+          if (g_inv && focused_field() == nullptr) {
+            open_gui(craftpp::gui::OpenGui::Kind::Inventory, 0, 0, 0);
+            g_inv = false;
+          }
           // Mouse look.
           if (!game->have_mouse) {
             game->last_x = mx;
@@ -1086,7 +1242,18 @@ int main(int argc, char** argv) {
             }
             if (game->rmb_cooldown > 0) --game->rmb_cooldown;
             if (hit && rmb && (!game->rmb_was || game->rmb_cooldown == 0)) {
-              if (auto* held = player.inventory.held()) {
+              // Block activation first (vanilla clickMouse order): GUI
+              // blocks open instead of receiving the placement.
+              const int hit_id = world.block_id(hx, hy, hz);
+              using K = craftpp::gui::OpenGui::Kind;
+              namespace bid = craftpp::world::bid;
+              if (hit_id == bid::kWorkbench) {
+                open_gui(K::Workbench, hx, hy, hz);
+              } else if (hit_id == bid::kFurnaceIdle || hit_id == bid::kFurnaceBurn) {
+                open_gui(K::Furnace, hx, hy, hz);
+              } else if (hit_id == bid::kChest) {
+                open_gui(K::Chest, hx, hy, hz);
+              } else if (auto* held = player.inventory.held()) {
                 if (held->has_value()) {
                   const int before = held->value().stack_size;
                   if (game->controller->send_place_block(held->value(), hx, hy, hz, side)) {
@@ -1204,6 +1371,7 @@ int main(int argc, char** argv) {
         g_chars.clear();
         g_backspace = false;
         g_enter = false;
+        g_inv = false;
       }
 
       // ---- render ----
@@ -1541,7 +1709,8 @@ int main(int argc, char** argv) {
         // First-person hand + held item (ItemRenderer, fullbright).
         // Overlay: drawn after everything 3D with a fresh depth buffer,
         // so the hand never clips into walls (always on top, like HUD).
-        if (game->third_person == 0) {
+        // Hidden while a container GUI is open (vanilla parity).
+        if (game->third_person == 0 && !craftpp::gui::gui_open(game->gui)) {
           // Rendered stack = the stored snapshot (old item falls, new one
           // rises after the bottom-adopt in the tick update).
           const int held_id = game->equip_id, held_damage = game->equip_damage;
@@ -1692,6 +1861,58 @@ int main(int argc, char** argv) {
             craftpp::render::Tessellator tess;
             tess.upload(hud.bars);
             tess.draw();
+          }
+          // Open container overlay (panel + slots + cursor, HUD stays).
+          if (game && craftpp::gui::gui_open(game->gui)) {
+            auto& g = game->gui;
+            auto cm = craftpp::gui::draw_open_gui(g, game->player->inventory, font, sctx.lang,
+                                                 mx, my, w, h);
+            terrain_prog.use();
+            terrain_prog.set_mat4(t_mvp, &ortho[0][0]);
+            terrain_prog.set_mat4(t_view, &ident[0][0]);
+            terrain_prog.set_float(t_fog_start, 1.0e9F);
+            terrain_prog.set_float(t_fog_end, 2.0e9F);
+            terrain_prog.set_int(t_tex, 0);
+            using K = craftpp::gui::OpenGui::Kind;
+            if (g.kind == K::Inventory) inv_tex.bind(0);
+            if (g.kind == K::Workbench) craft_tex.bind(0);
+            if (g.kind == K::Furnace) furn_tex.bind(0);
+            if (g.kind == K::Chest) chest_tex.bind(0);
+            if (!cm.panel.vertices.empty()) {
+              craftpp::render::Tessellator tess;
+              tess.upload(cm.panel);
+              tess.draw();
+            }
+            draw_2d(cm.items, items_tex);
+            if (!cm.blocks.vertices.empty()) {
+              glClear(GL_DEPTH_BUFFER_BIT);
+              glEnable(GL_DEPTH_TEST);
+              glDisable(GL_CULL_FACE);
+              atlas.bind(0);
+              craftpp::render::Tessellator tess;
+              tess.upload(cm.blocks);
+              tess.draw();
+              glDisable(GL_DEPTH_TEST);
+              glEnable(GL_CULL_FACE);
+            }
+            draw_2d(cm.shadow, font_tex);
+            draw_2d(cm.text, font_tex);
+            if (!cm.bars.vertices.empty() || !cm.hl.vertices.empty()) {
+              flat_prog.use();
+              flat_prog.set_mat4(f_mvp, &ortho[0][0]);
+              flat_prog.set_float(f_bright, 1.0F);
+              if (!cm.bars.vertices.empty()) {
+                craftpp::render::Tessellator tess;
+                tess.upload(cm.bars);
+                tess.draw();
+              }
+              if (!cm.hl.vertices.empty()) {
+                craftpp::render::Tessellator tess;
+                tess.upload(cm.hl);
+                tess.draw();
+              }
+              terrain_prog.use();
+            }
           }
           glDisable(GL_BLEND);
           glEnable(GL_DEPTH_TEST);
