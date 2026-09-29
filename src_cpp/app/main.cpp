@@ -306,6 +306,7 @@ struct Session {
   int third_person = 0;  // 0 first, 1 third-back, 2 third-front (F5 cycles)
   // First-person equip animation (updateEquippedItem, per frame).
   float equip_cur = 1.0F;
+  float equip_prev = 1.0F;
   int equip_slot = -1, equip_id = 0, equip_damage = 0;
   double accumulator = 0.0;
   int tick_count = 0;
@@ -1094,6 +1095,7 @@ int main(int argc, char** argv) {
                   if (held->value().stack_size == 0) {
                     *held = std::nullopt;
                   } else if (held->value().stack_size != before || game->creative) {
+                    game->equip_prev = 0.0F;
                     game->equip_cur = 0.0F;
                   }
                 }
@@ -1155,6 +1157,7 @@ int main(int argc, char** argv) {
               game->equip_id = eid;
               game->equip_damage = edmg;
               const float etarget = esame ? 1.0F : 0.0F;
+              game->equip_prev = game->equip_cur;
               float ede = etarget - game->equip_cur;
               if (ede < -0.25F) ede = -0.25F;
               if (ede > 0.25F) ede = 0.25F;
@@ -1517,7 +1520,17 @@ int main(int argc, char** argv) {
           }
         }
 
+        // Transparent pass (renderPass 1): all fluids after all opaque,
+        // so lakebeds show through the blended surface.
+        atlas.bind(0);
+        for (auto& [key, tess] : game->fluid_map) {
+          const craftpp::Aabb box(key.first * 16.0, 0.0, key.second * 16.0,
+                                  key.first * 16.0 + 16.0, 128.0, key.second * 16.0 + 16.0);
+          if (frustum.box_visible(box)) tess.draw();
+        }
         // First-person hand + held item (ItemRenderer, fullbright).
+        // Overlay: drawn after everything 3D with a fresh depth buffer,
+        // so the hand never clips into walls (always on top, like HUD).
         if (game->third_person == 0) {
           auto* held = player.inventory.held();
           int held_id = 0, held_damage = 0;
@@ -1536,7 +1549,10 @@ int main(int argc, char** argv) {
           if (hsw < 0.0F) hsw += 1.0F;
           const float swing_p = player.prev_swing + hsw * static_cast<float>(alpha);
           craftpp::render::FirstPersonMeshes fm;
-          craftpp::render::build_first_person(fm, held_id, held_damage, game->equip_cur, swing_p);
+          craftpp::render::build_first_person(
+              fm, held_id, held_damage,
+              game->equip_prev + (game->equip_cur - game->equip_prev) * static_cast<float>(alpha),
+              swing_p);
           // The chain is camera-space: map to world via the inverse view
           // (exact bob included) before drawing with the world MVP.
           {
@@ -1557,6 +1573,7 @@ int main(int argc, char** argv) {
           terrain_prog.set_float(t_fog_end, fog_end);
           terrain_prog.set_vec3(t_fog_color, fog_r, fog_g, fog_b);
           terrain_prog.set_int(t_tex, 0);
+          glClear(GL_DEPTH_BUFFER_BIT);
           if (!fm.atlas.vertices.empty()) {
             atlas.bind(0);
             craftpp::render::Tessellator ftess;
@@ -1577,14 +1594,7 @@ int main(int argc, char** argv) {
           }
         }
 
-        // Transparent pass (renderPass 1): all fluids after all opaque,
-        // so lakebeds show through the blended surface.
-        atlas.bind(0);
-        for (auto& [key, tess] : game->fluid_map) {
-          const craftpp::Aabb box(key.first * 16.0, 0.0, key.second * 16.0,
-                                  key.first * 16.0 + 16.0, 128.0, key.second * 16.0 + 16.0);
-          if (frustum.box_visible(box)) tess.draw();
-        }
+
         flat_prog.use();
         flat_prog.set_mat4(f_mvp, &vp[0][0]);
         flat_prog.set_float(f_bright, daylight);
