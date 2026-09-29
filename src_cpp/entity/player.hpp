@@ -31,6 +31,8 @@ struct Inventory {
   std::array<std::optional<ItemStack>, 36> main{};
   std::array<std::optional<ItemStack>, 4> armor{};
   int current = 0;
+  // InventoryPlayer.itemStack: the cursor (held-by-mouse) stack.
+  std::optional<ItemStack> cursor{};
 
   std::optional<ItemStack>* held() {
     if (current < 0 || current >= 36) return nullptr;

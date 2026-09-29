@@ -487,6 +487,18 @@ int item_max_stack(int item_id) {
   }
 }
 
+int armor_type(int item_id) {
+  if (item_id >= 298 && item_id <= 317) return (item_id - 298) % 4;
+  if (item_id == bid::kPumpkin) return 0;
+  return -1;
+}
+
+int container_item(int item_id) {
+  // ItemBucketMilk/ItemBucket water+lava -> bucketEmpty (325). Soup returns
+  // its bowl via onFoodEaten, not the container slot (no entry here).
+  if (item_id == 326 || item_id == 327 || item_id == 335) return 325;
+  return 0;
+}
 int armor_value(int item_id) {
   if (item_id < 298 || item_id > 317) return 0;
   static const int kRed[5][4] = {

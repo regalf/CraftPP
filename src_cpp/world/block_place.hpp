@@ -91,6 +91,11 @@ int damage_vs_entity(int item_id);              // 1 default, tools/swords more
 int item_max_damage(int item_id);               // 0 = undamageable
 int item_max_stack(int item_id);
 int armor_value(int item_id);  // damageReduceAmount (0 for non-armor)
+// ItemArmor.armorType (0 helm, 1 chest, 2 legs, 3 boots; pumpkin = 0);
+// -1 for non-armor.
+int armor_type(int item_id);
+// Item.getContainerItem (buckets -> empty bucket); 0 = none.
+int container_item(int item_id);
 // Item.isFull3D (swords, tools incl. hoe, fishing rod, stick, bone).
 bool item_full_3d(int item_id);
 

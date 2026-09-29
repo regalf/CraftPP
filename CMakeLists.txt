@@ -100,6 +100,7 @@ add_executable(craftpp_tests
   tests/test_tick.cpp
   tests/test_tile.cpp
   tests/test_crafting.cpp
+  tests/test_container.cpp
   tests/test_mob.cpp
   tests/test_frustum.cpp
   tests/test_mcregion.cpp
