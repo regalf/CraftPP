@@ -1081,6 +1081,9 @@ int main(int argc, char** argv) {
                 game->controller->click_block(hx, hy, hz, side);
               if (hit && lmb) game->controller->send_block_removing(hx, hy, hz, side);
               if (!lmb) game->controller->reset_block_removing();
+              // Held-LMB pumps the arm continuously, even at air (requested
+              // feel; vanilla only swings on tile hits).
+              if (lmb) player.swing_item();
             }
             if (game->rmb_cooldown > 0) --game->rmb_cooldown;
             if (hit && rmb && (!game->rmb_was || game->rmb_cooldown == 0)) {
@@ -1151,8 +1154,10 @@ int main(int argc, char** argv) {
                 edmg = held_eq->value().damage;
               }
               const int eslot = player.inventory.current;
-              const bool esame =
-                  (game->equip_slot == eslot && game->equip_id == eid);
+              // Empty hand on both sides counts as same (null==null), and
+              // worn-down stacks adopt damage silently: no re-equip.
+              const bool esame = (game->equip_slot == eslot && game->equip_id == eid) ||
+                                 (eid == 0 && game->equip_id == 0);
               game->equip_slot = eslot;
               game->equip_id = eid;
               game->equip_damage = edmg;
