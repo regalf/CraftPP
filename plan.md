@@ -128,11 +128,15 @@ fly double-tap, TPS meter, auto-respawn).
 
 ## Remaining M5 (dependency order — updated 2026-09-29)
 
-1. **Playable inventory GUI — NEXT**: crafting grid 3x3 (table + player),
-   furnace/chest mouse interaction (drag/drop, shift-click, progress
-   arrows/flames). Engine ready (recipes, tile entities, Container
-   drafts); only the interaction layer is missing. This is the M5
-   blocker: everything playable hangs off it.
+1. **Playable inventory GUI — DONE 2026-09-29**: Container/Slot core
+   (slotClick/transfer/merge verbatim + tests), player inventory (E/ESC,
+   drag-less click/RMB/shift, outside-drop, armor validity, 2x2 crafting
+   with consume + container-item return), workbench 3x3, furnace (progress
+   flame/arrow from the tile), chest (27 slots), cursor stack, hover wash,
+   tooltips (name table + dye/wool/coal/slab overrides), RMB-activation
+   opens GUI instead of placing, range/validity auto-close with drops.
+   LEFT: paper doll (player model in the panel), creative item picker,
+   potion-effect strip, movement frozen while open (vanilla walks).
 2. **Options/keybindings — partial**: difficulty functional (spawn
    flags), sliders (music/sound/sensitivity/fov/invert) in memory.
    LEFT: GameSettings backend + remappable keys. (Mouse sensitivity
