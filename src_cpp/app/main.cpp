@@ -1084,9 +1084,18 @@ int main(int argc, char** argv) {
             if (game->rmb_cooldown > 0) --game->rmb_cooldown;
             if (hit && rmb && (!game->rmb_was || game->rmb_cooldown == 0)) {
               if (auto* held = player.inventory.held()) {
-                if (held->has_value() &&
-                    game->controller->send_place_block(held->value(), hx, hy, hz, side)) {
-                  player.swing_item();  // clickMouse RMB swings on success
+                if (held->has_value()) {
+                  const int before = held->value().stack_size;
+                  if (game->controller->send_place_block(held->value(), hx, hy, hz, side)) {
+                    player.swing_item();  // clickMouse RMB swings on success
+                  }
+                  // clickMouse post-place: emptied stacks clear; changed
+                  // counts (or creative, always) snap the equip anim to 0.
+                  if (held->value().stack_size == 0) {
+                    *held = std::nullopt;
+                  } else if (held->value().stack_size != before || game->creative) {
+                    game->equip_cur = 0.0F;
+                  }
                 }
               }
               game->rmb_cooldown = 4;  // clickMouse sets the timer every use
