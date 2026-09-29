@@ -196,7 +196,7 @@ void ControllerCreative::send_block_removing(int x, int y, int z, int side) {
   if (--break_countdown_ <= 0) {
     break_countdown_ = 5;
     block_hit(w, x, y, z, side);
-    send_block_removed(x, y, z, side);
+    if (send_block_removed(x, y, z, side)) p.swing_item();
   }
 }
 

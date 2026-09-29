@@ -1081,9 +1081,6 @@ int main(int argc, char** argv) {
                 game->controller->click_block(hx, hy, hz, side);
               if (hit && lmb) game->controller->send_block_removing(hx, hy, hz, side);
               if (!lmb) game->controller->reset_block_removing();
-              // Held-LMB pumps the arm continuously, even at air (requested
-              // feel; vanilla only swings on tile hits).
-              if (lmb) player.swing_item();
             }
             if (game->rmb_cooldown > 0) --game->rmb_cooldown;
             if (hit && rmb && (!game->rmb_was || game->rmb_cooldown == 0)) {
