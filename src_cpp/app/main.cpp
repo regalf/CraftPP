@@ -1153,17 +1153,23 @@ int main(int argc, char** argv) {
               const int eslot = player.inventory.current;
               // Empty hand on both sides counts as same (null==null), and
               // worn-down stacks adopt damage silently: no re-equip.
+              // The new key is adopted only at the bottom (< 0.1) like the
+              // source, so the dip always runs full (off-screen for blocks).
               const bool esame = (game->equip_slot == eslot && game->equip_id == eid) ||
                                  (eid == 0 && game->equip_id == 0);
-              game->equip_slot = eslot;
-              game->equip_id = eid;
-              game->equip_damage = edmg;
               const float etarget = esame ? 1.0F : 0.0F;
               game->equip_prev = game->equip_cur;
               float ede = etarget - game->equip_cur;
               if (ede < -0.25F) ede = -0.25F;
               if (ede > 0.25F) ede = 0.25F;
               game->equip_cur += ede;
+              if (game->equip_cur < 0.1F) {
+                game->equip_slot = eslot;
+                game->equip_id = eid;
+                game->equip_damage = edmg;
+              } else {
+                game->equip_damage = edmg;
+              }
             }
             // Death opens the death screen (no auto-respawn).
             if (player.is_dead && ui.cur == craftpp::gui::Screen::None) {
@@ -1534,19 +1540,9 @@ int main(int argc, char** argv) {
         // Overlay: drawn after everything 3D with a fresh depth buffer,
         // so the hand never clips into walls (always on top, like HUD).
         if (game->third_person == 0) {
-          auto* held = player.inventory.held();
-          int held_id = 0, held_damage = 0;
-          if (held != nullptr && held->has_value() && held->value().stack_size > 0) {
-            held_id = held->value().item_id;
-            held_damage = held->value().damage;
-          }
-          const int slot = player.inventory.current;
-          // Same stack worn down (slot+id equal, damage adopted silently):
-          // no re-equip, like the source identity check. Progress itself
-          // advances per tick above; render only consumes it here.
-          game->equip_slot = slot;
-          game->equip_id = held_id;
-          game->equip_damage = held_damage;
+          // Rendered stack = the stored snapshot (old item falls, new one
+          // rises after the bottom-adopt in the tick update).
+          const int held_id = game->equip_id, held_damage = game->equip_damage;
           float hsw = player.swing - player.prev_swing;
           if (hsw < 0.0F) hsw += 1.0F;
           const float swing_p = player.prev_swing + hsw * static_cast<float>(alpha);
