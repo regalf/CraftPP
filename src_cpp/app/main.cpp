@@ -1162,8 +1162,8 @@ int main(int argc, char** argv) {
               const float etarget = esame ? 1.0F : 0.0F;
               game->equip_prev = game->equip_cur;
               float ede = etarget - game->equip_cur;
-              if (ede < -0.5F) ede = -0.5F;
-              if (ede > 0.5F) ede = 0.5F;
+              if (ede < -0.34F) ede = -0.34F;
+              if (ede > 0.34F) ede = 0.34F;
               game->equip_cur += ede;
               if (game->equip_cur < 0.1F) {
                 game->equip_slot = eslot;
