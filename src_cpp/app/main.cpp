@@ -1079,6 +1079,8 @@ int main(int argc, char** argv) {
             } else {
               if (hit && lmb && !game->lmb_was)
                 game->controller->click_block(hx, hy, hz, side);
+              else if (lmb && !game->lmb_was)
+                player.swing_item();  // clickMouse swings even at air
               if (hit && lmb) game->controller->send_block_removing(hx, hy, hz, side);
               if (!lmb) game->controller->reset_block_removing();
             }
