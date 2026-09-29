@@ -126,44 +126,44 @@ done** (chest/furnace/sign + smelting + drops). **Drops/pickup done.**
 survival slice (daylight, mob boxes, hotbar, held placing, G creative,
 fly double-tap, TPS meter, auto-respawn).
 
-## Remaining M5 (dependency order — replan 2026-09-26, updated 2026-09-27)
+## Remaining M5 (dependency order — updated 2026-09-29)
 
-1. **McRegion save/load — done** (level.dat + region/*.mcr + level.dat
-   Player + chunk Entities/TileEntities/TileTicks; validated both ways
-   against real Java 1.0 classes; demo `--save <dir>` loads/saves,
-   SIGTERM/SIGINT exit cleanly).
-2. **GUI + menus — mostly done**: main menu (logo/splash/buttons),
-   select/create world (real list/load/delete/rename, seed/mode/features),
-   multiplayer + options + achievements/stats placeholders, HUD
-   (crosshair/hotbar+item sprites+damage bars/hearts/food/armor/air/xp),
-   FontRenderer, ESC menu, death screen, loading screen with progress,
-   crack overlay, hotbar wheel. LEFT: playable inventory (crafting grid,
-   furnace/chest mouse interaction).
-3. **Options/keybindings — partial**: difficulty functional (spawn
+1. **Playable inventory GUI — NEXT**: crafting grid 3x3 (table + player),
+   furnace/chest mouse interaction (drag/drop, shift-click, progress
+   arrows/flames). Engine ready (recipes, tile entities, Container
+   drafts); only the interaction layer is missing. This is the M5
+   blocker: everything playable hangs off it.
+2. **Options/keybindings — partial**: difficulty functional (spawn
    flags), sliders (music/sound/sensitivity/fov/invert) in memory.
-   LEFT: GameSettings backend + remappable keys.
-4. **Weather** — rain/snow/thunderstorms (touches light, spawning,
+   LEFT: GameSettings backend + remappable keys. (Mouse sensitivity
+   follows the vanilla cubic curve only at default 0.5; exact curve
+   pending with the backend.)
+3. **Weather** — rain/snow/thunderstorms (touches light, spawning,
    lightning). Optional for "playable", needed for fidelity.
-5. **More mobs + real pathfinding** — skeleton (arrows),
+4. **More mobs + real pathfinding** — skeleton (arrows),
    spider/creeper, remaining animals. Pathfinding lands HERE with the
    mobs that need it (so far: direct seek + wall-follow + single-step
    hop). Render interpolation done (partial tick).
-6. **Mechanics leftovers** — food/stews/buckets/bow, full armor,
-   durability, redstone/rails, TNT, sleep/XP/riding/achievements,
-   enchanting, silverfish/ice. PARTIAL: live fluids done (flow/harden/
-   scheduling), fluid render done (lowered surfaces, flow-rotated UVs,
-   animated TextureFX water/lava/flow, transparent pass, underwater
-   fog+water overlay), shape blocks done (slab half-boxes, snow layer
-   heights, ladder/vine wall quads, precise shape picking, fluid-skip),
-   entity pickup bbox, drops no-push gate, harvest-before-removal,
-   placement entity check. LEFT in fluids: swamp water tint
-   (field_40256_A), vine spread ticks. Placement audit vs Java done:
-   fluids untargetable (no mining), normal blocks cannot replace water,
-   support blocks (torch/rail/chest/...) can, lilypad via water raycast,
-   snow drops 1 snowball.
+5. **Mechanics leftovers** — food backend (FoodStats is a stub: hunger
+   never depletes), buckets/bow-use states, armor visuals/durability,
+   redstone/rails, TNT, sleep/XP/riding/achievements/stats,
+   enchanting, silverfish/ice, vine spread ticks, swamp water tint,
+   maps in hand, potion overlay, nameplates, entity shadows + entity
+   lighting (mobs/player render fullbright), enchant glint,
+   stairs-as-3D in hand. DONE since replan: live fluids (flow/harden/
+   scheduling + full render: lowered surfaces, flow UVs, animated
+   TextureFX, transparent pass, underwater fog+overlay), shape blocks
+   (slabs, snow layers, ladder/vine quads, precise picking), textured
+   EntityItem drops (pop motion, pushOutOfBlocks, idDropped pops),
+   sneak 0.3x + sprint 1.3x (double-tap + frame edges, FOV-less like
+   1.0), player rendering (first-person hand+item/swing/equip,
+   third-person F5 + biped model + char.png), placement audit
+   (groundcover fluids, chest/rail, lilypad raycast, RMB repeat),
+   pickup bbox, drops no-push, harvest order, loaded-mob ticks,
+   entity placement check.
 
-Known debts: demo SIGSEGV masked by respawn (not root-caused, see
-known-issues); zombie feel pending real paths (interpolation done).
+Known debts: `craftpp_demo` deprecated (unmaintained, notice at
+startup); zombie feel pending real paths (interpolation done).
 
 ### M5b — Streaming + multithread (after playable singleplayer)
 Out of the fixed 3×3: chunks generate around the walking player
