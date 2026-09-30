@@ -317,6 +317,7 @@ struct Session {
   float equip_cur = 1.0F;
   float equip_prev = 1.0F;
   int equip_slot = -1, equip_id = 0, equip_damage = 0;
+  int last_sub = -1;  // meshed skylight subtraction (rebake on change)
   // Open container overlay (inventory/crafting/furnace/chest; world ticks on).
   craftpp::gui::OpenGui gui;
   bool gui_lmb_down = false, gui_rmb_down = false;
@@ -677,8 +678,8 @@ int main(int argc, char** argv) {
         game->load_pop.pop_back();
         world.populate_one(cx, cz);
         game->refill_tint(cx, cz);
-        game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
-        game->fluid_map[{cx, cz}].upload(mesher.mesh_fluid_live(world.region(), cx, cz));
+        game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz, world.skylight_sub()));
+        game->fluid_map[{cx, cz}].upload(mesher.mesh_fluid_live(world.region(), cx, cz, world.skylight_sub()));
         world.clear_dirty(cx, cz);
         ui.loading_progress = (done + 1) * 100 / total;
         return !game->load_pop.empty();
@@ -689,8 +690,8 @@ int main(int argc, char** argv) {
       for (const auto& [cx, cz] : world.provided_chunks()) {
         if (game->tess_map.count({cx, cz}) != 0) continue;
         game->refill_tint(cx, cz);
-        game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz));
-        game->fluid_map[{cx, cz}].upload(mesher.mesh_fluid_live(world.region(), cx, cz));
+        game->tess_map[{cx, cz}].upload(mesher.mesh_live(world.region(), cx, cz, world.skylight_sub()));
+        game->fluid_map[{cx, cz}].upload(mesher.mesh_fluid_live(world.region(), cx, cz, world.skylight_sub()));
         world.clear_dirty(cx, cz);
       }
       craftpp::gui::open_screen(ui, craftpp::gui::Screen::None, sctx);
@@ -1569,11 +1570,29 @@ int main(int argc, char** argv) {
         atlas.bind(0);
         glEnable(GL_BLEND);  // water surface alpha (animated texture)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        // Day/night light shift (vanilla lightmap parity): rebake baked
+        // meshes when the skylight subtraction flips (dawn/dusk, rare).
+        {
+          const int sub_now = world.skylight_sub();
+          if (sub_now != game->last_sub) {
+            game->last_sub = sub_now;
+            for (auto& [key, tess] : game->tess_map) {
+              game->refill_tint(key.first, key.second);
+              tess.upload(
+                  mesher.mesh_live(world.region(), key.first, key.second, sub_now));
+              game->fluid_map[key].upload(mesher.mesh_fluid_live(world.region(), key.first,
+                                                                  key.second, sub_now));
+              world.clear_dirty(key.first, key.second);
+            }
+          }
+        }
         for (auto& [key, tess] : game->tess_map) {
           if (world.is_dirty(key.first, key.second)) {
             game->refill_tint(key.first, key.second);
-            tess.upload(mesher.mesh_live(world.region(), key.first, key.second));
-            game->fluid_map[key].upload(mesher.mesh_fluid_live(world.region(), key.first, key.second));
+            tess.upload(mesher.mesh_live(world.region(), key.first, key.second,
+                                            world.skylight_sub()));
+            game->fluid_map[key].upload(mesher.mesh_fluid_live(
+                world.region(), key.first, key.second, world.skylight_sub()));
             world.clear_dirty(key.first, key.second);
           }
           const craftpp::Aabb box(key.first * 16.0, 0.0, key.second * 16.0,
@@ -1725,11 +1744,13 @@ int main(int argc, char** argv) {
             const float ix = static_cast<float>(lerp_pos(it->prev_pos_x, it->pos_x, alpha));
             const float iy = static_cast<float>(lerp_pos(it->prev_pos_y, it->pos_y, alpha));
             const float iz = static_cast<float>(lerp_pos(it->prev_pos_z, it->pos_z, alpha));
-            float b = static_cast<float>(world.region().full_light(
-                          static_cast<int>(std::floor(ix)), static_cast<int>(std::floor(iy)),
-                          static_cast<int>(std::floor(iz)))) /
-                      15.0F;
-            if (b < 0.0F) b = 0.0F;
+            // Entity brightness (getBlockLightValue + table parity).
+            const int dix = static_cast<int>(std::floor(ix));
+            const int diy = static_cast<int>(std::floor(iy));
+            const int diz = static_cast<int>(std::floor(iz));
+            const int dsky = world.region().saved_sky(dix, diy, diz) - world.skylight_sub();
+            const int dblk = world.region().saved_block(dix, diy, diz);
+            float b = craftpp::world::bid::light_brightness(dsky > dblk ? dsky : dblk);
             if (b > 1.0F) b = 1.0F;
             craftpp::render::build_drop(dm, it->item.item_id, it->item.damage,
                                         it->item.stack_size, ix, iy, iz,
@@ -1888,8 +1909,10 @@ int main(int argc, char** argv) {
           // fullscreen water tile scrolling against yaw/pitch, entity
           // brightness, alpha 0.5. No lava overlay exists in 1.0.
           if (eye_water && water_overlay_ok && ui.cur == craftpp::gui::Screen::None) {
+            const int esky = world.region().saved_sky(exb, eyb, ezb) - world.skylight_sub();
+            const int eblk = world.region().saved_block(exb, eyb, ezb);
             const float eye_light =
-                static_cast<float>(world.region().full_light(exb, eyb, ezb)) / 15.0F;
+                craftpp::world::bid::light_brightness(esky > eblk ? esky : eblk);
             const float uo = -game->yaw / 64.0F, vo = game->pitch / 64.0F;
             const float fw = static_cast<float>(w), fh = static_cast<float>(h);
             craftpp::render::Mesh ov;

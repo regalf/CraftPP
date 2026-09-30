@@ -165,6 +165,11 @@ fly double-tap, TPS meter, auto-respawn).
    (groundcover fluids, chest/rail, lilypad raycast, RMB repeat),
    pickup bbox, drops no-push, harvest order, loaded-mob ticks,
    entity placement check.
+   Light render rework done 2026-09-30 (was binary-feeling: meshes baked
+   stored light with no day/night and a linear+floor curve): per-face
+   Chunk.getBlockLightValue (daylight subtraction) through the vanilla
+   lightBrightnessTable, mesh rebake when the subtraction flips, spawner
+   already verbatim (sky-gate rand(32), then full <= rand(8)).
 
 Known debts: `craftpp_demo` deprecated (unmaintained, notice at
 startup); zombie feel pending real paths (interpolation done).

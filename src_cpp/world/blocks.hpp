@@ -594,6 +594,15 @@ inline bool render_item_in_3d(int render_type) {
   return render_type == 0 || render_type == 10 || render_type == 11 || render_type == 13 ||
          render_type == 16 || render_type == 21 || render_type == 22 || render_type == 27;
 }
+
+// WorldProvider lightBrightnessTable with lightLevel 0 (overworld):
+// table[i] = (1-f)/(3f+1), f = 1-i/15. Out-of-range clamps like the
+// engine's max() usage (negative sky after subtraction reads table 0).
+inline constexpr float light_brightness(int level) {
+  const int l = level < 0 ? 0 : (level > 15 ? 15 : level);
+  const float f = 1.0F - static_cast<float>(l) / 15.0F;
+  return (1.0F - f) / (f * 3.0F + 1.0F);
+}
 inline int render_type(int id) {
   switch (id) {
     case kSapling:

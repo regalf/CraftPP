@@ -43,14 +43,17 @@ struct Mesher {
   //
   // Fluids are excluded: they go in mesh_fluid_live (the transparent
   // pass — like the engine's renderPass 1, drawn after all opaque).
-  Mesh mesh_live(const world::RegionWorld& world, int cx, int cz) const;
+  // sky_sub is the daytime skylight subtraction (LiveWorld::skylight_sub,
+  // 0 at noon); meshes bake it like Chunk.getBlockLightValue does.
+  Mesh mesh_live(const world::RegionWorld& world, int cx, int cz, int sky_sub = 0) const;
 
   // Fluid-only pass (renderBlockFluids): lowered surfaces, flow UVs.
   // Drawn after every opaque chunk with blending on.
-  Mesh mesh_fluid_live(const world::RegionWorld& world, int cx, int cz) const;
+  Mesh mesh_fluid_live(const world::RegionWorld& world, int cx, int cz, int sky_sub = 0) const;
 
  private:
-  Mesh mesh_live_impl(const world::RegionWorld& world, int cx, int cz, bool fluids_only) const;
+  Mesh mesh_live_impl(const world::RegionWorld& world, int cx, int cz, bool fluids_only,
+                      int sky_sub) const;
 };
 
 }  // namespace craftpp::render

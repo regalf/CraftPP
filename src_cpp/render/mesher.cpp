@@ -144,16 +144,16 @@ Mesh Mesher::mesh_chunk(const world::Chunk& chunk) const {
   return mesh;
 }
 
-Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz) const {
-  return mesh_live_impl(world, cx, cz, false);
+Mesh Mesher::mesh_live(const world::RegionWorld& world, int cx, int cz, int sky_sub) const {
+  return mesh_live_impl(world, cx, cz, false, sky_sub);
 }
 
-Mesh Mesher::mesh_fluid_live(const world::RegionWorld& world, int cx, int cz) const {
-  return mesh_live_impl(world, cx, cz, true);
+Mesh Mesher::mesh_fluid_live(const world::RegionWorld& world, int cx, int cz, int sky_sub) const {
+  return mesh_live_impl(world, cx, cz, true, sky_sub);
 }
 
-Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz,
-                            bool fluids_only) const {
+Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz, bool fluids_only,
+                            int sky_sub) const {
   Mesh mesh;
   mesh.vertices.reserve(8192);
   mesh.indices.reserve(12288);
@@ -194,11 +194,14 @@ Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz,
               g, b, u0, u1, v0, v1, us, vs);
   };
   // Stored-light brightness for one face (sampled in the neighbour cell,
-  // like the engine does; floor keeps caves readable).
+  // like the engine does): Chunk.getBlockLightValue with the daytime
+  // subtraction, mapped through the WorldProvider lightBrightnessTable
+  // (lightLevel 0: (1-f)/(3f+1), f = 1-i/15). No readability floor: caves
+  // go properly black like vanilla; gradation comes from the engine BFS.
   auto brightness = [&](int nx, int ny, int nz) {
-    const int l = world.full_light(nx, ny, nz);
-    const int c = l < 4 ? 4 : l;
-    return static_cast<float>(c) / 15.0F;
+    const int sky = world.saved_sky(nx, ny, nz) - sky_sub;
+    const int blk = world.saved_block(nx, ny, nz);
+    return world::bid::light_brightness(sky > blk ? sky : blk);
   };
 
   for (int lz = 0; lz < 16; ++lz) {
