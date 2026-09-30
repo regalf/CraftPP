@@ -589,6 +589,11 @@ inline int block_texture(int id, int side, int meta) {
 
 // Mirrors Block.getRenderType per block id (0 cube, 1 cross, 2 torch,
 // 3 fire, 4 fluid, else special geometry handled by later milestones).
+// RenderBlocks.renderItemIn3d: the types drawn 3D in GUIs/drops/hands.
+inline bool render_item_in_3d(int render_type) {
+  return render_type == 0 || render_type == 10 || render_type == 11 || render_type == 13 ||
+         render_type == 16 || render_type == 21 || render_type == 22 || render_type == 27;
+}
 inline int render_type(int id) {
   switch (id) {
     case kSapling:

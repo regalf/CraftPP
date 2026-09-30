@@ -45,8 +45,7 @@ inline void build_first_person(FirstPersonMeshes& out, int held_id, int held_dam
     const bool is_block = held_id < 256;
     const int rt = is_block ? world::bid::render_type(held_id) : -1;
     const bool as_cube =
-        is_block && (rt == 0 || rt == 10 || rt == 11 || rt == 13 || rt == 16 || rt == 21 ||
-                     rt == 22 || rt == 27);
+        is_block && world::bid::render_item_in_3d(rt);
     if (as_cube) {
       emit_unit_cube(out.atlas, t, held_id, held_damage, 1.0F);
     } else {

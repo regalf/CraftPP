@@ -102,8 +102,7 @@ void build_equipped(EquippedMeshes& out, const ModelPart& arm, int item_id, int 
   const bool is_block = item_id < 256;
   const int rt = is_block ? world::bid::render_type(item_id) : -1;
   const bool cube3d =
-      is_block && (rt == 0 || rt == 10 || rt == 11 || rt == 13 || rt == 16 || rt == 21 ||
-                   rt == 22 || rt == 27);
+      is_block && world::bid::render_item_in_3d(rt);
   // Geometry helpers work in 0..1 block units; scale up to model units.
   Mat4 to_model;
   to_model.scale(16.0F, 16.0F, 16.0F);

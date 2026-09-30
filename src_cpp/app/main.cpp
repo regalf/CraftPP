@@ -381,6 +381,7 @@ int main(int argc, char** argv) {
     craftpp::render::Texture atlas, pig_tex, zombie_tex, gui_tex, icons_tex, font_tex, items_tex,
         bg_tex, logo_tex, water_tex, char_tex;
     craftpp::render::Texture inv_tex, craft_tex, furn_tex, chest_tex;  // container panels
+    craftpp::render::Texture allitems_tex;  // creative picker panel
     craftpp::render::Image atlas_img;  // retained for TextureFX tile uploads
     craftpp::render::FluidTextureFx fx_water(craftpp::render::FluidTextureFx::Kind::Water),
         fx_water_flow(craftpp::render::FluidTextureFx::Kind::WaterFlow),
@@ -411,6 +412,7 @@ int main(int argc, char** argv) {
     must_load("/gui/crafting.png", craft_tex);
     must_load("/gui/furnace.png", furn_tex);
     must_load("/gui/container.png", chest_tex);
+    must_load("/gui/allitems.png", allitems_tex);
     must_load("/mob/char.png", char_tex, 64, 32);
     {
       // Water overlay (ItemRenderer /misc/water.png): optional, tiled, so
@@ -748,6 +750,13 @@ int main(int argc, char** argv) {
       using K = craftpp::gui::OpenGui::Kind;
       if (kind == K::Inventory) {
         craftpp::gui::ctn::build_player(g.kit, inv);
+      } else if (kind == K::Creative) {
+        craftpp::gui::ctn::build_creative(g.kit, inv);
+        g.creative_list = craftpp::gui::ctn::creative_item_list();
+        g.creative_frac = 0.0F;
+        g.creative_drag = false;
+        craftpp::gui::ctn::creative_scroll(g.kit, g.creative_list, 0.0F);
+        g.y_size = 208;
       } else if (kind == K::Workbench) {
         craftpp::gui::ctn::build_workbench(g.kit, inv);
       } else if (kind == K::Furnace || kind == K::Chest) {
@@ -1111,7 +1120,9 @@ int main(int argc, char** argv) {
         game->esc_was = esc;
         if (ui.cur != craftpp::gui::Screen::None) {
           // (menu opened above: skip game input this frame)
-        } else if (craftpp::gui::gui_open(game->gui)) {
+        } else {
+          const bool cgui = craftpp::gui::gui_open(game->gui);
+          if (cgui) {
           // ---- container overlay: world keeps ticking, clicks hit slots ----
           {
             auto& g = game->gui;
@@ -1150,24 +1161,64 @@ int main(int argc, char** argv) {
                   glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
               auto& g = game->gui;
               auto& pl = *game->player;
-              if (clmb && !game->gui_lmb_down) {
-                const int slot = craftpp::gui::slot_at(g, mx, my);
-                g.kit.c.click(slot, 0, shift, pl.inventory.cursor, drop_stack);
+              using CK = craftpp::gui::OpenGui::Kind;
+              const bool is_creative = g.kind == CK::Creative;
+              // Creative scrollbar: drag + wheel (vanilla handleMouseInput).
+              bool in_bar = false;
+              if (is_creative) {
+                const double dx = mx - g.px, dy = my - g.py;
+                in_bar = dx >= 155 && dx < 169 && dy >= 17 && dy < 179;
+                if (clmb && !game->gui_lmb_down && in_bar) g.creative_drag = true;
+                if (!clmb) g.creative_drag = false;
+                if (g.creative_drag) {
+                  g.creative_frac = static_cast<float>(dy - 25) / 146.0F;
+                  if (g.creative_frac < 0.0F) g.creative_frac = 0.0F;
+                  if (g.creative_frac > 1.0F) g.creative_frac = 1.0F;
+                }
+                if (g_wheel != 0) {
+                  const int rows =
+                      static_cast<int>(g.creative_list.size()) / 8 - 8 + 1;
+                  if (rows > 0) {
+                    g.creative_frac -=
+                        (g_wheel > 0 ? 1.0F : -1.0F) / static_cast<float>(rows);
+                    if (g.creative_frac < 0.0F) g.creative_frac = 0.0F;
+                    if (g.creative_frac > 1.0F) g.creative_frac = 1.0F;
+                  }
+                }
+                craftpp::gui::ctn::creative_scroll(g.kit, g.creative_list, g.creative_frac);
               }
-              if (crmb && !game->gui_rmb_down) {
+              g_wheel = 0;
+              if (clmb && !game->gui_lmb_down && !in_bar) {
                 const int slot = craftpp::gui::slot_at(g, mx, my);
-                g.kit.c.click(slot, 1, shift, pl.inventory.cursor, drop_stack);
+                if (is_creative)
+                  craftpp::gui::ctn::creative_click(g.kit.c, slot, 0, shift,
+                                                    pl.inventory.cursor, drop_stack);
+                else
+                  g.kit.c.click(slot, 0, shift, pl.inventory.cursor, drop_stack);
+              }
+              if (crmb && !game->gui_rmb_down && !in_bar) {
+                const int slot = craftpp::gui::slot_at(g, mx, my);
+                if (is_creative)
+                  craftpp::gui::ctn::creative_click(g.kit.c, slot, 1, shift,
+                                                    pl.inventory.cursor, drop_stack);
+                else
+                  g.kit.c.click(slot, 1, shift, pl.inventory.cursor, drop_stack);
               }
               game->gui_lmb_down = clmb;
               game->gui_rmb_down = crmb;
             }
           }
-        } else {
-          if (g_inv && focused_field() == nullptr) {
-            open_gui(craftpp::gui::OpenGui::Kind::Inventory, 0, 0, 0);
+          }  // end if (cgui)
+          // Gameplay input below is gated on !cgui; the tick loop always
+          // runs (vanilla SP keeps ticking with a GUI open).
+          if (!cgui && g_inv && focused_field() == nullptr) {
+            open_gui(game->creative ? craftpp::gui::OpenGui::Kind::Creative
+                                    : craftpp::gui::OpenGui::Kind::Inventory,
+                     0, 0, 0);
             g_inv = false;
           }
-          // Mouse look.
+          // Mouse look (frozen while a container is open).
+          if (!cgui) {
           if (!game->have_mouse) {
             game->last_x = mx;
             game->last_y = my;
@@ -1184,6 +1235,7 @@ int main(int argc, char** argv) {
           game->last_y = my;
           player.rotation_yaw = game->yaw;
           player.rotation_pitch = game->pitch;
+          }
 
           auto& in = player.movement_input;
           const bool w_now = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
@@ -1194,14 +1246,17 @@ int main(int argc, char** argv) {
           if (space_now && !game->space_was) in->jump_press_edges++;
           game->w_was = w_now;
           game->space_was = space_now;
+          // Frozen while a container is open (vanilla walks; M5 leftover).
           in->move_forward =
-              (w_now ? 1.0f : 0.0f) -
-              (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ? 1.0f : 0.0f);
+              cgui ? 0.0f
+                   : (w_now ? 1.0f : 0.0f) -
+                         (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS ? 1.0f : 0.0f);
           in->move_strafe =
-              (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ? 1.0f : 0.0f) -
-              (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ? 1.0f : 0.0f);
-          in->jump = space_now;
-          in->sneak = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
+              cgui ? 0.0f
+                   : (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS ? 1.0f : 0.0f) -
+                         (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS ? 1.0f : 0.0f);
+          in->jump = !cgui && space_now;
+          in->sneak = !cgui && glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS;
 
           game->accumulator += frame;
           while (game->accumulator >= kTick) {
@@ -1230,6 +1285,7 @@ int main(int argc, char** argv) {
               foe = m.get();
               foe_d2 = d2;
             }
+            if (!cgui) {
             if (foe != nullptr && lmb && !game->lmb_was) {
               player.attack_target(*foe);
             } else {
@@ -1271,8 +1327,10 @@ int main(int argc, char** argv) {
               }
               game->rmb_cooldown = 4;  // clickMouse sets the timer every use
             }
+            }  // end !cgui combat/interact gate
             game->lmb_was = lmb;
             game->rmb_was = rmb;
+            if (!cgui) {
             const bool g_now = glfwGetKey(window, GLFW_KEY_G) == GLFW_PRESS;
             if (g_now && !game->g_was) {
               game->creative = !game->creative;
@@ -1303,11 +1361,12 @@ int main(int argc, char** argv) {
             }
             while (g_wheel < 0) {
               player.inventory.current = (player.inventory.current + 1) % 9;
-              ++g_wheel;
+              --g_wheel;
             }
+            }  // end !cgui hotbar/mode gate
 
             world.tick();
-            if (!game->creative) game->csp->update_controller();
+            if (!cgui && !game->creative) game->csp->update_controller();
             // Equip animation runs on game ticks (4 ticks full traverse):
             // vanilla advances it per render frame (instant at high fps),
             // here it stays visible and matches the 4-tick place rhythm.
@@ -1878,6 +1937,7 @@ int main(int argc, char** argv) {
             if (g.kind == K::Workbench) craft_tex.bind(0);
             if (g.kind == K::Furnace) furn_tex.bind(0);
             if (g.kind == K::Chest) chest_tex.bind(0);
+            if (g.kind == K::Creative) allitems_tex.bind(0);
             if (!cm.panel.vertices.empty()) {
               craftpp::render::Tessellator tess;
               tess.upload(cm.panel);

@@ -17,7 +17,7 @@ namespace craftpp::gui {
 // while open — doesGuiPauseGame=false parity). Drawn in the 2D pass like
 // the HUD; clicks route to Container::click instead of mining.
 struct OpenGui {
-  enum class Kind { None, Inventory, Workbench, Furnace, Chest };
+  enum class Kind { None, Inventory, Workbench, Furnace, Chest, Creative };
   Kind kind = Kind::None;
   ctn::Kit kit;
   int bx = 0, by = 0, bz = 0;  // block pos for bench/furnace/chest
@@ -26,6 +26,10 @@ struct OpenGui {
   float px = 0.0F, py = 0.0F;  // panel origin (recomputed per draw)
   // Furnace progress, refreshed from the tile each frame (12/24 scaled).
   int burn_scaled = 0, cook_scaled = 0;
+  // Creative picker: full list + scroll fraction + scrollbar drag latch.
+  std::vector<entity::ItemStack> creative_list;
+  float creative_frac = 0.0F;
+  bool creative_drag = false;
 };
 
 inline bool gui_open(const OpenGui& g) { return g.kind != OpenGui::Kind::None; }
@@ -93,6 +97,13 @@ inline ContainerMeshes draw_open_gui(OpenGui& g, entity::Inventory& inv, const F
       blit_256(out.panel, px, py + rows * 18 + 17, 0, 126, 176, 96);
       label("Chest", 8, 6);
       label("Inventory", 8, g.y_size - 94);
+      break;
+    }
+    case OpenGui::Kind::Creative: {
+      blit_256(out.panel, px, py, 0, 0, 176, 208);
+      blit_256(out.panel, px + 154, py + 17 + (162 - 17) * g.creative_frac, 0, 208, 16,
+               16);
+      label("Item selection", 8, 6);
       break;
     }
     case OpenGui::Kind::None:

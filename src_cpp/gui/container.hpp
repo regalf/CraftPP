@@ -9,7 +9,9 @@
 #include "entity/items.hpp"
 #include "entity/player.hpp"
 #include "gui/crafting.hpp"
+#include "gui/item_icons.hpp"
 #include "world/block_place.hpp"
+#include "world/blocks.hpp"
 
 namespace craftpp::gui::ctn {
 
@@ -462,8 +464,7 @@ inline void build_furnace(Kit& k, entity::Inventory& inv,
 }
 
 inline void build_chest(Kit& k, entity::Inventory& inv,
-                         std::array<std::optional<entity::ItemStack>, 27>& ch) {
-  k.small_grid = false;
+                         std::array<std::optional<entity::ItemStack>, 27>& ch) {  k.small_grid = false;
   k.grid.clear();
   k.result = std::nullopt;
   auto* main_b = k.keep(std::make_unique<ArrBacking<36>>(&inv.main));
@@ -481,6 +482,143 @@ inline void build_chest(Kit& k, entity::Inventory& inv,
     if (n < 27) return shift_take(c, n, 27, 63, true);
     return shift_take(c, n, 0, 27, false);
   };
+}
+
+// ---- creative picker (ContainerCreative/GuiContainerCreative) ----
+// 72-cell visible window over the full item list + player hotbar.
+// Grid clicks use the custom take/grow logic (NOT slotClick); shift is a
+// no-op (func_35373_b empty override); outside drops like -999.
+inline std::optional<entity::ItemStack> creative_click(
+    Container& c, int n, int button, bool sh, std::optional<entity::ItemStack>& cursor,
+    const DropFn& drop) {
+  (void)sh;  // shift only matters for take-all-into-cursor (handled below)
+  Slot* s = c.get(n);
+  if (s == nullptr) return std::nullopt;
+  const bool is_grid = n < 72;
+  if (!is_grid) return c.click(n, button, false, cursor, drop);
+  auto* cell_opt = s->stack();
+  const bool cell_has = cell_opt != nullptr && cell_opt->has_value();
+  const bool cur_has = cursor.has_value();
+  entity::ItemStack* cell = cell_has ? &**cell_opt : nullptr;
+  if (cur_has && cell_has && cursor->item_id == cell->item_id) {
+    const int max = world::edit::item_max_stack(cursor->item_id);
+    if (button == 0) {
+      if (sh) {
+        cursor->stack_size = max;
+      } else if (cursor->stack_size < max) {
+        ++cursor->stack_size;
+      }
+    } else {
+      if (cursor->stack_size <= 1) {
+        cursor = std::nullopt;
+      } else {
+        --cursor->stack_size;
+      }
+    }
+    return std::nullopt;
+  }
+  if (cur_has) {
+    cursor = std::nullopt;
+    return std::nullopt;
+  }
+  if (!cell_has) {
+    cursor = std::nullopt;
+    return std::nullopt;
+  }
+  cursor = *cell;
+  if (sh) cursor->stack_size = world::edit::item_max_stack(cursor->item_id);
+  return std::nullopt;
+}
+
+// Scroll window refill (func_35374_a verbatim): rows = size/8-8+1,
+// start = round(frac*rows) clamped >= 0.
+inline void creative_scroll(Kit& k, const std::vector<entity::ItemStack>& list, float frac) {
+  const int rows = static_cast<int>(list.size()) / 8 - 8 + 1;
+  int start = static_cast<int>(frac * rows + 0.5F);
+  if (start < 0) start = 0;
+  for (int r = 0; r < 9; ++r) {
+    for (int q = 0; q < 8; ++q) {
+      const int li = q + (r + start) * 8;
+      auto* o = k.c.get(r * 8 + q)->stack();
+      if (li >= 0 && li < static_cast<int>(list.size()))
+        *o = list[li];
+      else
+        *o = std::nullopt;
+    }
+  }
+}
+
+// Full creative item list in vanilla order (ContainerCreative verbatim:
+// fixed block order with damage variants, all items except potion, dyes).
+inline std::vector<entity::ItemStack> creative_item_list() {
+  using namespace world::bid;
+  std::vector<entity::ItemStack> out;
+  struct E {
+    int id, n;
+  };
+  const E blocks[] = {
+      {kCobble, 1}, {kStone, 1}, {kDiamondOre, 1}, {kGoldOre, 1}, {kIronOre, 1},
+      {kCoalOre, 1}, {kLapisOre, 1}, {kRedstoneOre, 1}, {kStoneBrick, 3}, {kClay, 1},
+      {kDiamondBlock, 1}, {kGoldBlock, 1}, {kSteelBlock, 1}, {kBedrock, 1}, {kLapisBlock, 1},
+      {kBrick, 1}, {kCobbleMossy, 1}, {kStepSingle, 6}, {kObsidian, 1}, {kNetherrack, 1},
+      {kSoulSand, 1}, {kGlowstone, 1}, {kLog, 3}, {kLeaves, 3}, {kDirt, 1}, {kGrass, 1},
+      {kSand, 1}, {kSandstone, 1}, {kGravel, 1}, {kWeb, 1}, {kWoodPlank, 1}, {kSapling, 3},
+      {kDeadBush, 1}, {kSponge, 1}, {kIce, 1}, {kSnowBlock, 1}, {kFlowerYellow, 1},
+      {kFlowerRed, 1}, {kMushroomBrown, 1}, {kMushroomRed, 1}, {kCactus, 1}, {kMelon, 1},
+      {kPumpkin, 1}, {kPumpkinLantern, 1}, {kVine, 1}, {kPaneIron, 1}, {kPaneGlass, 1},
+      {kNetherBrick, 1}, {kNetherFence, 1}, {kStairsNether, 1}, {kWhiteStone, 1},
+      {kMycelium, 1}, {kLilyPad, 1}, {kTallGrass, 2}, {kChest, 1}, {kWorkbench, 1},
+      {kGlass, 1}, {kTnt, 1}, {kBookshelf, 1}, {kWool, 16}, {kDispenser, 1},
+      {kFurnaceIdle, 1}, {kNoteBlock, 1}, {kJukebox, 1}, {kPistonSticky, 1}, {kPistonBase, 1},
+      {kFence, 1}, {kFenceGate, 1}, {kLadder, 1}, {kRail, 1}, {kRailPowered, 1},
+      {kRailDetector, 1}, {kTorch, 1}, {kStairsWood, 1}, {kStairsCobble, 1}, {kStairsBrick, 1},
+      {kStairsStoneBrick, 1}, {kLever, 1}, {kPlateStone, 1}, {kPlateWood, 1},
+      {kTorchRedOn, 1}, {kButton, 1}, {kTrapDoor, 1}, {kEnchantTable, 1},
+  };
+  int cloth = 0, slab = 0, wood = 0, sapling = 0, brick = 0, grass = 1, leaves = 0;
+  for (const E& e : blocks) {
+    for (int k = 0; k < e.n; ++k) {
+      int dmg = 0;
+      if (e.id == kWool)
+        dmg = cloth++;
+      else if (e.id == kStepSingle)
+        dmg = slab++;
+      else if (e.id == kLog)
+        dmg = wood++;
+      else if (e.id == kSapling)
+        dmg = sapling++;
+      else if (e.id == kStoneBrick)
+        dmg = brick++;
+      else if (e.id == kTallGrass)
+        dmg = grass++;
+      else if (e.id == kLeaves)
+        dmg = leaves++;
+      out.emplace_back(e.id, 1, dmg);
+    }
+  }
+  for (int id = 256; id <= 382; ++id) {
+    if (id == 373) continue;  // potion excluded like the source
+    if (craftpp::gui::item_sprite_index(id) < 0) continue;
+    out.emplace_back(id, 1, 0);
+  }
+  for (int dmg = 1; dmg < 16; ++dmg) out.emplace_back(351, 1, dmg);
+  return out;
+}
+
+inline void build_creative(Kit& k, entity::Inventory& inv) {
+  k.small_grid = false;
+  k.grid.assign(72, std::nullopt);
+  k.result = std::nullopt;
+  auto* main_b = k.keep(std::make_unique<ArrBacking<36>>(&inv.main));
+  auto* grid_b = k.keep(std::make_unique<GridBacking>(&k.grid, []() {}));
+  k.c.matrix = nullptr;
+  k.c.matrix_n = 0;
+  k.c.result_slot = -1;
+  for (int r = 0; r < 9; ++r)
+    for (int q = 0; q < 8; ++q) k.add(grid_b, q + r * 8, 8 + q * 18, 18 + r * 18);
+  for (int q = 0; q < 9; ++q) k.add(main_b, q, 8 + q * 18, 184);
+  // Shift-click is a no-op in the picker (empty func_35373_b override).
+  k.c.shift = [](Container&, int) -> std::optional<entity::ItemStack> { return std::nullopt; };
 }
 
 }  // namespace craftpp::gui::ctn

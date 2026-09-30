@@ -47,8 +47,7 @@ inline void build_drop(DropMeshes& out, int item_id, int damage, int count, floa
   const bool is_block = item_id < 256 && item_id > 0;
   const int rt = is_block ? world::bid::render_type(item_id) : -1;
   const bool as_cube =
-      is_block && (rt == 0 || rt == 10 || rt == 11 || rt == 13 || rt == 16 || rt == 21 ||
-                   rt == 22 || rt == 27);  // renderItemIn3d
+      is_block && world::bid::render_item_in_3d(rt);  // renderItemIn3d
   if (as_cube) {
     // Mini-cube 0.25, spun around Y (vanilla scale + glRotatef(spin)).
     const float spin = (age_partial / 20.0F + hover) * (180.0F / 3.14159265F);

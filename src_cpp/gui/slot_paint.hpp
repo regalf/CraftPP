@@ -144,7 +144,7 @@ inline void paint_stack(PaintOut o, const Font& font, float x, float y, int id, 
                         int damage, int max_damage) {
   if (id == 0 || count <= 0) return;
   if (id < 256) {
-    if (world::bid::render_type(id) == 0) {
+    if (world::bid::render_item_in_3d(world::bid::render_type(id))) {
       if (o.blocks != nullptr) build_item_cube(*o.blocks, x, y, id, damage);
     } else {
       if (o.blocks != nullptr) sprite(*o.blocks, x, y, world::bid::block_texture(id, 2, damage));

@@ -260,3 +260,77 @@ TEST_CASE("container screen draw does not crash") {
   CHECK(std::string(craftpp::gui::name_key_for(263, 1)) == "item.charcoal.name");
   CHECK(std::string(craftpp::gui::name_key_for(44, 3)) == "tile.stoneSlab.cobble.name");
 }
+
+TEST_CASE("creative list order and content") {
+  auto list = craftpp::gui::ctn::creative_item_list();
+  REQUIRE(list.size() > 100);
+  // Fixed block order first, cloth damage runs inline.
+  CHECK(list[0].item_id == 4);
+  CHECK(list[1].item_id == 1);
+  bool potion = false, dye = false;
+  for (const auto& s : list) {
+    if (s.item_id == 373) potion = true;
+    if (s.item_id == 351 && s.damage > 0) dye = true;
+  }
+  CHECK(!potion);
+  CHECK(dye);
+  // Cloth run: 16 wool variants in a row.
+  int wool = 0;
+  for (const auto& s : list)
+    if (s.item_id == 35) ++wool;
+  CHECK(wool == 16);
+}
+
+TEST_CASE("creative scroll windows the list") {
+  Inventory inv;
+  Kit k;
+  craftpp::gui::ctn::build_creative(k, inv);
+  CHECK(k.c.slots.size() == 81);
+  auto list = craftpp::gui::ctn::creative_item_list();
+  craftpp::gui::ctn::creative_scroll(k, list, 0.0F);
+  REQUIRE(k.grid[0].has_value());
+  CHECK(k.grid[0]->item_id == list[0].item_id);
+  craftpp::gui::ctn::creative_scroll(k, list, 1.0F);
+  const int rows = static_cast<int>(list.size()) / 8 - 8 + 1;
+  const int start = rows;  // frac 1 = full offset (verbatim, may overshoot)
+  REQUIRE(k.grid[0].has_value());
+  CHECK(k.grid[0]->item_id == list[start * 8].item_id);
+  CHECK(k.grid[0]->item_id != list[0].item_id);  // window actually moved
+}
+
+TEST_CASE("creative grid click take/grow/shrink") {
+  using craftpp::gui::ctn::creative_click;
+  Inventory inv;
+  Kit k;
+  craftpp::gui::ctn::build_creative(k, inv);
+  auto list = craftpp::gui::ctn::creative_item_list();
+  craftpp::gui::ctn::creative_scroll(k, list, 0.0F);
+  craftpp::gui::ctn::DropFn drop = [](craftpp::entity::ItemStack&) {};
+  // Take a copy with LMB.
+  creative_click(k.c, 0, 0, false, inv.cursor, drop);
+  REQUIRE(inv.cursor.has_value());
+  CHECK(inv.cursor->item_id == list[0].item_id);
+  CHECK(inv.cursor->stack_size == 1);
+  // Same item again grows the cursor.
+  creative_click(k.c, 0, 0, false, inv.cursor, drop);
+  CHECK(inv.cursor->stack_size == 2);
+  // Shift+LMB maxes it.
+  creative_click(k.c, 0, 0, true, inv.cursor, drop);
+  CHECK(inv.cursor->stack_size == 64);
+  // Different item clears the cursor.
+  creative_click(k.c, 1, 0, false, inv.cursor, drop);
+  CHECK(!inv.cursor.has_value());
+  // RMB on same item shrinks.
+  creative_click(k.c, 0, 0, false, inv.cursor, drop);
+  creative_click(k.c, 0, 0, false, inv.cursor, drop);
+  CHECK(inv.cursor->stack_size == 2);
+  creative_click(k.c, 0, 1, false, inv.cursor, drop);
+  CHECK(inv.cursor->stack_size == 1);
+  creative_click(k.c, 0, 1, false, inv.cursor, drop);
+  CHECK(!inv.cursor.has_value());
+  // Shift-click is a no-op in the picker.
+  k.grid[10] = st(3, 5);
+  auto r = k.c.click(10, 0, true, inv.cursor, drop);
+  CHECK(!r.has_value());
+  CHECK(k.grid[10]->stack_size == 5);
+}
