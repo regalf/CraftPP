@@ -1361,7 +1361,7 @@ int main(int argc, char** argv) {
             }
             while (g_wheel < 0) {
               player.inventory.current = (player.inventory.current + 1) % 9;
-              --g_wheel;
+              ++g_wheel;
             }
             }  // end !cgui hotbar/mode gate
 
