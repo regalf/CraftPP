@@ -1776,11 +1776,21 @@ int main(int argc, char** argv) {
           float hsw = player.swing - player.prev_swing;
           if (hsw < 0.0F) hsw += 1.0F;
           const float swing_p = player.prev_swing + hsw * static_cast<float>(alpha);
+          // renderArm view-lag (ItemRenderer verbatim, no yaw wrap like the
+          // source): lerped arm vs current rotation, 0.1 factor.
+          const float arm_p = player.prev_render_arm_pitch +
+                              (player.render_arm_pitch - player.prev_render_arm_pitch) *
+                                  static_cast<float>(alpha);
+          const float arm_y = player.prev_render_arm_yaw +
+                              (player.render_arm_yaw - player.prev_render_arm_yaw) *
+                                  static_cast<float>(alpha);
+          const float lag_p = (player.rotation_pitch - arm_p) * 0.1F;
+          const float lag_y = (player.rotation_yaw - arm_y) * 0.1F;
           craftpp::render::FirstPersonMeshes fm;
           craftpp::render::build_first_person(
               fm, held_id, held_damage,
               game->equip_prev + (game->equip_cur - game->equip_prev) * static_cast<float>(alpha),
-              swing_p);
+              swing_p, lag_p, lag_y);
           // The chain is camera-space: map to world via the inverse view
           // (exact bob included) before drawing with the world MVP.
           {

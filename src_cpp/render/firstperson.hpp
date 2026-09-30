@@ -12,10 +12,9 @@ namespace craftpp::render {
 
 // First-person hand + held item (ItemRenderer.renderItemInFirstPerson port,
 // minus maps/eat/drink/block/bow use-poses which need the item-use state
-// machine (M5 leftover), and minus the renderArm view-lag micro-rotation).
-// Chains run in camera space; brightness is forced fullbright like the
-// source (var6 = 1.0F). Meshes split by texture: atlas (block items),
-// items (flat icons), skin (arm).
+// machine (M5 leftover)). Chains run in camera space; brightness is forced
+// fullbright like the source (var6 = 1.0F). Meshes split by texture: atlas
+// (block items), items (flat icons), skin (arm).
 struct FirstPersonMeshes {
   Mesh atlas;
   Mesh items;
@@ -23,10 +22,15 @@ struct FirstPersonMeshes {
 };
 
 // held_id <= 0: empty hand (arm only). swing/equip in 0..1 (already
-// partial-interpolated by the caller).
+// partial-interpolated by the caller). lag_pitch/lag_yaw are the renderArm
+// view-lag micro-rotations ((rotation - renderArm) * 0.1, caller-interpolated
+// like the source); they wrap the whole chain, arm and item alike.
 inline void build_first_person(FirstPersonMeshes& out, int held_id, int held_damage, float equip,
-                               float swing) {
+                               float swing, float lag_pitch = 0.0F, float lag_yaw = 0.0F) {
   using namespace item_mesh;
+  Mat4 lag;
+  lag.rotate(lag_pitch, 1.0F, 0.0F, 0.0F);
+  lag.rotate(lag_yaw, 0.0F, 1.0F, 0.0F);
   const float sswing = std::sin(swing * 3.14159265F);
   const float sswing_sqrt = std::sin(std::sqrt(std::max(swing, 0.0F)) * 3.14159265F);
   const float sswing_sq = std::sin(swing * swing * 3.14159265F);
@@ -42,6 +46,7 @@ inline void build_first_person(FirstPersonMeshes& out, int held_id, int held_dam
     t.rotate(-sswing_sqrt * 80.0F, 1.0F, 0.0F, 0.0F);
     t.scale(0.4F, 0.4F, 0.4F);
     if (held_id == 346) t.rotate(180.0F, 0.0F, 1.0F, 0.0F);  // fishing rod
+    t = Mat4::mul(lag, t);  // renderArm view-lag wraps the whole chain
     const bool is_block = held_id < 256;
     const int rt = is_block ? world::bid::render_type(held_id) : -1;
     const bool as_cube =
@@ -83,6 +88,7 @@ inline void build_first_person(FirstPersonMeshes& out, int held_id, int held_dam
   t.rotate(200.0F, 1.0F, 0.0F, 0.0F);
   t.rotate(-135.0F, 0.0F, 1.0F, 0.0F);
   t.translate(5.6F, 0.0F, 0.0F);
+  t = Mat4::mul(lag, t);  // renderArm view-lag wraps the whole chain
   // Arm box (char 40,16) at pivot (-5,2,0), straight (onGround=0 pose).
   ModelPart arm;
   arm.px = -5.0F;

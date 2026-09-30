@@ -135,6 +135,21 @@ TEST_CASE("first-person hand and held item meshes", "[model]") {
     CHECK(fm.items.vertices.size() == (2 + 64) * 4);
     CHECK(fm.skin.vertices.empty());
   }
+  // View-lag rotates the whole chain (arm and item alike).
+  {
+    craftpp::render::FirstPersonMeshes a, b;
+    craftpp::render::build_first_person(a, 3, 0, 1.0F, 0.0F);
+    craftpp::render::build_first_person(b, 3, 0, 1.0F, 0.0F, 5.0F, -3.0F);
+    REQUIRE(a.atlas.vertices.size() == b.atlas.vertices.size());
+    bool moved = false;
+    for (std::size_t i = 0; i < a.atlas.vertices.size(); ++i) {
+      if (std::abs(a.atlas.vertices[i].x - b.atlas.vertices[i].x) > 1e-4F ||
+          std::abs(a.atlas.vertices[i].y - b.atlas.vertices[i].y) > 1e-4F) {
+        moved = true;
+      }
+    }
+    CHECK(moved);
+  }
   // Swing moves the item.
   {
     craftpp::render::FirstPersonMeshes a, b;
