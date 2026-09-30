@@ -1965,22 +1965,25 @@ int main(int argc, char** argv) {
               glDisable(GL_DEPTH_TEST);
               glEnable(GL_CULL_FACE);
             }
-            draw_2d(cm.shadow, font_tex);
-            draw_2d(cm.text, font_tex);
-            if (!cm.bars.vertices.empty() || !cm.hl.vertices.empty()) {
+            // Hover wash + tooltip box go UNDER the text (vanilla z-order).
+            if (!cm.hl.vertices.empty()) {
               flat_prog.use();
               flat_prog.set_mat4(f_mvp, &ortho[0][0]);
               flat_prog.set_float(f_bright, 1.0F);
-              if (!cm.bars.vertices.empty()) {
-                craftpp::render::Tessellator tess;
-                tess.upload(cm.bars);
-                tess.draw();
-              }
-              if (!cm.hl.vertices.empty()) {
-                craftpp::render::Tessellator tess;
-                tess.upload(cm.hl);
-                tess.draw();
-              }
+              craftpp::render::Tessellator tess;
+              tess.upload(cm.hl);
+              tess.draw();
+              terrain_prog.use();
+            }
+            draw_2d(cm.shadow, font_tex);
+            draw_2d(cm.text, font_tex);
+            if (!cm.bars.vertices.empty()) {
+              flat_prog.use();
+              flat_prog.set_mat4(f_mvp, &ortho[0][0]);
+              flat_prog.set_float(f_bright, 1.0F);
+              craftpp::render::Tessellator tess;
+              tess.upload(cm.bars);
+              tess.draw();
               terrain_prog.use();
             }
           }

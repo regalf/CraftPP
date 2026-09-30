@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <map>
 #include <string>
 
@@ -146,6 +147,9 @@ inline ContainerMeshes draw_open_gui(OpenGui& g, entity::Inventory& inv, const F
   }
   // Tooltip (item display name) when the cursor is empty and hovering a
   // filled slot. Missing keys show the key itself (StatCollector parity).
+  // Box mirrors GuiContainer verbatim: manual gradient rects (no texture),
+  // near-black wash + translucent purple border, 1px insets rounding the
+  // corners; white shadowed text.
   if (!inv.cursor.has_value() && hover >= 0) {
     const ctn::Slot* hs = g.kit.c.get(hover);
     const auto* ho = hs != nullptr ? hs->stack() : nullptr;
@@ -156,18 +160,43 @@ inline ContainerMeshes draw_open_gui(OpenGui& g, entity::Inventory& inv, const F
         const std::string& name = it != lang.end() ? it->second : key;
         const float tw = static_cast<float>(font.string_width(name));
         const float tx = static_cast<float>(mx) + 12, ty = static_cast<float>(my) - 12;
-        // Dark wash behind the text (opaque-ish like the vanilla box).
-        const std::uint32_t base = static_cast<std::uint32_t>(out.hl.vertices.size());
-        out.hl.vertices.push_back({tx - 3, ty + 8 + 3, 0, 0.06F, 0.06F, 0.06F, 0, 0, 0.94F});
-        out.hl.vertices.push_back({tx + tw + 3, ty + 8 + 3, 0, 0.06F, 0.06F, 0.06F, 0, 0, 0.94F});
-        out.hl.vertices.push_back({tx + tw + 3, ty - 3, 0, 0.06F, 0.06F, 0.06F, 0, 0, 0.94F});
-        out.hl.vertices.push_back({tx - 3, ty - 3, 0, 0.06F, 0.06F, 0.06F, 0, 0, 0.94F});
-        out.hl.indices.insert(out.hl.indices.end(), {base, base + 1, base + 2, base, base + 2,
-                                                     base + 3});
-        auto t = font.build_text(name, tx, ty, 0xFFFFFFFF, false);
+        constexpr float kH = 8.0F;
+        auto grad = [&](float x0, float y0, float x1, float y1, std::uint32_t top,
+                        std::uint32_t bot) {
+          const auto cv = [](std::uint32_t c) {
+            return std::array<float, 4>{((c >> 16) & 255) / 255.0F, ((c >> 8) & 255) / 255.0F,
+                                        ((c >> 0) & 255) / 255.0F, ((c >> 24) & 255) / 255.0F};
+          };
+          const auto ct = cv(top), cb = cv(bot);
+          const std::uint32_t base = static_cast<std::uint32_t>(out.hl.vertices.size());
+          out.hl.vertices.push_back({x0, y1, 0, cb[0], cb[1], cb[2], 0, 0, cb[3]});
+          out.hl.vertices.push_back({x1, y1, 0, cb[0], cb[1], cb[2], 0, 0, cb[3]});
+          out.hl.vertices.push_back({x1, y0, 0, ct[0], ct[1], ct[2], 0, 0, ct[3]});
+          out.hl.vertices.push_back({x0, y0, 0, ct[0], ct[1], ct[2], 0, 0, ct[3]});
+          out.hl.indices.insert(out.hl.indices.end(), {base, base + 1, base + 2, base, base + 2,
+                                                       base + 3});
+        };
+        constexpr std::uint32_t kBg = 0xF0101010;    // -267386864
+        constexpr std::uint32_t kEdge = 0x505000FF;  // 1347420415
+        constexpr std::uint32_t kEdgeD = 0x7828007F;  // halved twin
+        grad(tx - 3, ty - 4, tx + tw + 3, ty - 3, kBg, kBg);
+        grad(tx - 3, ty + kH + 3, tx + tw + 3, ty + kH + 4, kBg, kBg);
+        grad(tx - 3, ty - 3, tx + tw + 3, ty + kH + 3, kBg, kBg);
+        grad(tx - 4, ty - 3, tx - 3, ty + kH + 3, kBg, kBg);
+        grad(tx + tw + 3, ty - 3, tx + tw + 4, ty + kH + 3, kBg, kBg);
+        grad(tx - 3, ty - 3 + 1, tx - 3 + 1, ty + kH + 3 - 1, kEdge, kEdgeD);
+        grad(tx + tw + 2, ty - 3 + 1, tx + tw + 3, ty + kH + 3 - 1, kEdge, kEdgeD);
+        grad(tx - 3, ty - 3, tx + tw + 3, ty - 3 + 1, kEdge, kEdge);
+        grad(tx - 3, ty + kH + 2, tx + tw + 3, ty + kH + 3, kEdgeD, kEdgeD);
+        auto tsh = font.build_text(name, tx + 1, ty + 1, 0xFFFFFFFF, true);
+        auto tfg = font.build_text(name, tx, ty, 0xFFFFFFFF, false);
+        const auto b1 = static_cast<std::uint32_t>(out.shadow.vertices.size());
+        out.shadow.vertices.insert(out.shadow.vertices.end(), tsh.vertices.begin(),
+                                   tsh.vertices.end());
+        for (auto ix : tsh.indices) out.shadow.indices.push_back(b1 + ix);
         const auto b2 = static_cast<std::uint32_t>(out.text.vertices.size());
-        out.text.vertices.insert(out.text.vertices.end(), t.vertices.begin(), t.vertices.end());
-        for (auto ix : t.indices) out.text.indices.push_back(b2 + ix);
+        out.text.vertices.insert(out.text.vertices.end(), tfg.vertices.begin(), tfg.vertices.end());
+        for (auto ix : tfg.indices) out.text.indices.push_back(b2 + ix);
       }
     }
   }
