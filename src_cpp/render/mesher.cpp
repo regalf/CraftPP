@@ -30,6 +30,61 @@ constexpr QuadCorner kZMax[4] = {{0, 1, 1, 0, 0}, {0, 0, 1, 0, 1}, {1, 0, 1, 1, 
 constexpr QuadCorner kXMin[4] = {{0, 1, 1, 1, 0}, {0, 1, 0, 0, 0}, {0, 0, 0, 0, 1}, {0, 0, 1, 1, 1}};
 constexpr QuadCorner kXMax[4] = {{1, 0, 1, 0, 1}, {1, 0, 0, 1, 1}, {1, 1, 0, 1, 0}, {1, 1, 1, 0, 0}};
 
+// Ambient-occlusion taps (renderStandardBlockWithAmbientOcclusion verbatim,
+// fancy path). Corners follow kFaces emission order (V0..V3); all offsets
+// are absolute from the block: C center (= face-neighbour cell), per corner
+// FB fallback-side, OT other side, DG diagonal, G1/G2 canBlockGrass gates
+// (unshifted frame). ao averages the 4 occlusion values; brightness mixes
+// the 4 (sky, block) pairs with the packed-zero fallback to the center.
+struct AoTap {
+  int8_t fb[3], ot[3], dg[3], g1[3], g2[3];
+};
+struct AoFace {
+  int8_t ox, oy, oz;  // center (= face neighbour) offset
+  float shade;
+  AoTap c[4];
+};
+constexpr AoFace kAo[6] = {
+    // Bottom (side 0).
+    {0, -1, 0, 0.5F,
+     {{{-1, -1, 0}, {0, -1, 1}, {-1, -1, 1}, {0, -1, 1}, {-1, -1, 0}},
+      {{-1, -1, 0}, {0, -1, -1}, {-1, -1, -1}, {0, -1, -1}, {-1, -1, 0}},
+      {{1, -1, 0}, {0, -1, -1}, {1, -1, -1}, {0, -1, -1}, {1, -1, 0}},
+      {{1, -1, 0}, {0, -1, 1}, {1, -1, 1}, {0, -1, 1}, {1, -1, 0}}}},
+    // Top (side 1).
+    {0, 1, 0, 1.0F,
+     {{{1, 1, 0}, {0, 1, 1}, {1, 1, 1}, {0, 1, 1}, {1, 1, 0}},
+      {{1, 1, 0}, {0, 1, -1}, {1, 1, -1}, {0, 1, -1}, {1, 1, 0}},
+      {{-1, 1, 0}, {0, 1, -1}, {-1, 1, -1}, {0, 1, -1}, {-1, 1, 0}},
+      {{-1, 1, 0}, {0, 1, 1}, {-1, 1, 1}, {0, 1, 1}, {-1, 1, 0}}}},
+    // ZMin (side 2).
+    {0, 0, -1, 0.8F,
+     {{{-1, 0, -1}, {0, 1, -1}, {-1, 1, -1}, {-1, 0, -1}, {0, 1, -1}},
+      {{1, 0, -1}, {0, 1, -1}, {1, 1, -1}, {1, 0, -1}, {0, 1, -1}},
+      {{1, 0, -1}, {0, -1, -1}, {1, -1, -1}, {1, 0, -1}, {0, -1, -1}},
+      {{-1, 0, -1}, {0, -1, -1}, {-1, -1, -1}, {-1, 0, -1}, {0, -1, -1}}}},
+    // ZMax (side 3).
+    {0, 0, 1, 0.8F,
+     {{{-1, 0, 1}, {0, 1, 1}, {-1, 1, 1}, {-1, 0, 1}, {0, 1, 1}},
+      {{-1, 0, 1}, {0, -1, 1}, {-1, -1, 1}, {-1, 0, 1}, {0, -1, 1}},
+      {{1, 0, 1}, {0, -1, 1}, {1, -1, 1}, {1, 0, 1}, {0, -1, 1}},
+      {{1, 0, 1}, {0, 1, 1}, {1, 1, 1}, {1, 0, 1}, {0, 1, 1}}}},
+    // XMin (side 4).
+    {-1, 0, 0, 0.6F,
+     {{{-1, 0, 1}, {-1, 1, 0}, {-1, 1, 1}, {-1, 0, 1}, {-1, 1, 0}},
+      {{-1, 0, -1}, {-1, 1, 0}, {-1, 1, -1}, {-1, 0, -1}, {-1, 1, 0}},
+      {{-1, 0, -1}, {-1, -1, 0}, {-1, -1, -1}, {-1, 0, -1}, {-1, -1, 0}},
+      {{-1, 0, 1}, {-1, -1, 0}, {-1, -1, 1}, {-1, 0, 1}, {-1, -1, 0}}}},
+    // XMax (side 5).
+    {1, 0, 0, 0.6F,
+     {{{1, 0, 1}, {1, -1, 0}, {1, -1, 1}, {1, 0, -1}, {1, 1, 0}},
+      {{1, 0, -1}, {1, -1, 0}, {1, -1, -1}, {1, 0, -1}, {1, -1, 0}},
+      {{1, 0, -1}, {1, 1, 0}, {1, 1, -1}, {1, 0, 1}, {1, -1, 0}},
+      {{1, 0, 1}, {1, 1, 0}, {1, 1, 1}, {1, 0, 1}, {1, 1, 0}}}},
+};
+
+
+
 struct FaceDesc {
   Face face;
   const QuadCorner* corners;
@@ -193,6 +248,22 @@ Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz, boo
               z + f.corners[2].dz, x + f.corners[3].dx, y + f.corners[3].dy, z + f.corners[3].dz, r,
               g, b, u0, u1, v0, v1, us, vs);
   };
+  // Same face with per-corner colors (AO bake).
+  auto emit_face_c = [&](int x, int y, int z, const FaceDesc& f, const float* cr,
+                         const float* cg, const float* cb, int tile) {
+    float u0, u1, v0, v1;
+    tile_uv(tile, u0, u1, v0, v1);
+    const std::uint32_t base = static_cast<std::uint32_t>(mesh.vertices.size());
+    for (int i = 0; i < 4; ++i) {
+      const float uu = f.corners[i].u == 0.0F ? u0 : u1;
+      const float vv = f.corners[i].v == 0.0F ? v0 : v1;
+      mesh.vertices.push_back({static_cast<float>(x) + f.corners[i].dx,
+                               static_cast<float>(y) + f.corners[i].dy,
+                               static_cast<float>(z) + f.corners[i].dz, cr[i], cg[i], cb[i], uu,
+                               vv});
+    }
+    mesh.indices.insert(mesh.indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
+  };
   // Stored-light brightness for one face (sampled in the neighbour cell,
   // like the engine does): Chunk.getBlockLightValue with the daytime
   // subtraction, mapped through the WorldProvider lightBrightnessTable
@@ -202,6 +273,68 @@ Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz, boo
     const int sky = world.saved_sky(nx, ny, nz) - sky_sub;
     const int blk = world.saved_block(nx, ny, nz);
     return world::bid::light_brightness(sky > blk ? sky : blk);
+  };
+  // Per-corner AO bake (renderStandardBlockWithAmbientOcclusion, fancy
+  // path): each corner mixes its 2 side cells + diagonal + face center
+  // (getAoBrightness zero-fallback + int-division averages), mapped
+  // through the brightness table like brightness() above. cc[i] includes
+  // the face shade but no biome tint (applied by the caller per channel).
+  auto ao_cell = [&](int cx, int cy, int cz, float& ao, int& s, int& b) {
+    const int gid = (cy < 0 || cy >= world::RegionWorld::kHeight)
+                        ? 0
+                        : world.get_id(cx, cy, cz);
+    ao = (world::bid::material_opaque(gid) && world::bid::renders_as_normal(gid)) ? 0.2F
+                                                                                   : 1.0F;
+    s = world.saved_sky(cx, cy, cz);
+    b = world.saved_block(cx, cy, cz);
+  };
+  auto ao_grass = [&](int cx, int cy, int cz) {
+    // Block.canBlockGrass parity (opaque logic materials; transparent and
+    // leaves/water never block grass).
+    const int gid = (cy < 0 || cy >= world::RegionWorld::kHeight)
+                        ? 0
+                        : world.get_id(cx, cy, cz);
+    return world::bid::material_opaque(gid);
+  };
+  auto ao_corners = [&](int bx, int by, int bz, const FaceDesc& f, float* cc) {
+    const AoFace& af = kAo[static_cast<int>(f.face)];
+    for (int i = 0; i < 4; ++i) {
+      const AoTap& t = af.c[i];
+      float aF = -1, aO = -1, aD = -1, aC = -1;
+      int sF = -1, bF = -1, sO = -1, bO = -1, sD = -1, bD = -1, sC = -1, bC = -1;
+      ao_cell(bx + t.fb[0], by + t.fb[1], bz + t.fb[2], aF, sF, bF);
+      ao_cell(bx + t.ot[0], by + t.ot[1], bz + t.ot[2], aO, sO, bO);
+      ao_cell(bx + af.ox, by + af.oy, bz + af.oz, aC, sC, bC);
+      if (!ao_grass(bx + t.g1[0], by + t.g1[1], bz + t.g1[2]) &&
+          !ao_grass(bx + t.g2[0], by + t.g2[1], bz + t.g2[2])) {
+        aD = aF;
+        sD = sF;
+        bD = bF;
+      } else {
+        ao_cell(bx + t.dg[0], by + t.dg[1], bz + t.dg[2], aD, sD, bD);
+      }
+      // Packed-zero fallback (getAoBrightness verbatim): brightness-only.
+      // The ao averages (var9-12) never fall back.
+      if (sF == 0 && bF == 0) {
+        sF = sC;
+        bF = bC;
+      }
+      if (sO == 0 && bO == 0) {
+        sO = sC;
+        bO = bC;
+      }
+      if (sD == 0 && bD == 0) {
+        sD = sC;
+        bD = bC;
+      }
+      const float ao_avg = (aF + aO + aD + aC) * 0.25F;
+      const int sky_c = (sF + sO + sD + sC) / 4;
+      const int blk_c = (bF + bO + bD + bC) / 4;
+      const float base = world::bid::light_brightness(sky_c - sky_sub > blk_c ? sky_c - sky_sub
+                                                                               : blk_c);
+      cc[i] = af.shade * ao_avg * base;
+
+    }
   };
 
   for (int lz = 0; lz < 16; ++lz) {
@@ -497,6 +630,70 @@ Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz, boo
           const int tile = world::bid::block_texture(id, side, meta);
           const float b = brightness(nx, ny, nz) * f.shade;
           float r = b, g = b, bl = b;
+          // Fancy AO (renderStandardBlockWithAmbientOcclusion): non-emissive
+          // full cubes bake per-corner light; emissive blocks keep the flat
+          // path below like renderStandardBlockWithColorMultiplier.
+          if (world::bid::light_value(id) == 0) {
+            float cc[4];
+            ao_corners(x, y, z, f, cc);
+            float cr[4], cg[4], cb[4];
+            if (id == 2) {
+              if (side == 1) {
+                float tr = 1, tg = 1, tb = 1;
+                tint(x, z, false, tr, tg, tb);
+                for (int i = 0; i < 4; ++i) {
+                  cr[i] = cc[i] * tr;
+                  cg[i] = cc[i] * tg;
+                  cb[i] = cc[i] * tb;
+                }
+                emit_face_c(x, y, z, f, cr, cg, cb, tile);
+              } else if (side == 0) {
+                for (int i = 0; i < 4; ++i) {
+                  cr[i] = cc[i];
+                  cg[i] = cc[i];
+                  cb[i] = cc[i];
+                }
+                emit_face_c(x, y, z, f, cr, cg, cb, tile);
+              } else {
+                for (int i = 0; i < 4; ++i) {
+                  cr[i] = cc[i];
+                  cg[i] = cc[i];
+                  cb[i] = cc[i];
+                }
+                emit_face_c(x, y, z, f, cr, cg, cb, tile);
+                float tr = 1, tg = 1, tb = 1;
+                tint(x, z, false, tr, tg, tb);
+                for (int i = 0; i < 4; ++i) {
+                  cr[i] = cc[i] * tr;
+                  cg[i] = cc[i] * tg;
+                  cb[i] = cc[i] * tb;
+                }
+                emit_face_c(x, y, z, f, cr, cg, cb, 38);
+              }
+              continue;
+            }
+            float tr = 1, tg = 1, tb = 1;
+            if (id == 18) {
+              if ((meta & 3) == 1) {
+                tr = 0x61 / 255.0F;
+                tg = 0x99 / 255.0F;
+                tb = 0x41 / 255.0F;
+              } else if ((meta & 3) == 2) {
+                tr = 0x80 / 255.0F;
+                tg = 0xA7 / 255.0F;
+                tb = 0x25 / 255.0F;
+              } else {
+                tint(x, z, true, tr, tg, tb);
+              }
+            }
+            for (int i = 0; i < 4; ++i) {
+              cr[i] = cc[i] * tr;
+              cg[i] = cc[i] * tg;
+              cb[i] = cc[i] * tb;
+            }
+            emit_face_c(x, y, z, f, cr, cg, cb, tile);
+            continue;
+          }
           if (id == 2) {
             if (side == 1) {
               // Top: grayscale tile tinted with the biome color.

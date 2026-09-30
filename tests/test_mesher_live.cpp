@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "render/mesher.hpp"
+#include "world/blocks.hpp"
 #include "world/region.hpp"
 
 namespace {
@@ -171,3 +172,65 @@ TEST_CASE("cross quads are double-sided with upright UVs", "[mesher]") {
 }
 
 }  // namespace
+
+TEST_CASE("AO darkens concave corners per-vertex", "[mesher]") {
+  // Flat dirt floor + two stone walls forming an inside corner over (8,64,8).
+  // Vertices shared at the tucked point (8,64,8) include the darkened
+  // floor-top corner (2 occluders -> 0.6); at the open point (9,64,9) every
+  // face is unoccluded (1.0). Dirt tile isolates floor tops from stone sides.
+  craftpp::world::RegionWorld w;
+  std::vector<std::int8_t> raw(16 * 128 * 16, 0);
+  for (int lx = 0; lx < 16; ++lx)
+    for (int lz = 0; lz < 16; ++lz) raw[(lx * 16 + lz) * 128 + 63] = 3;
+  raw[(8 * 16 + 7) * 128 + 64] = 1;  // wall z-
+  raw[(7 * 16 + 8) * 128 + 64] = 1;  // wall x-
+  w.ensure_chunk(0, 0, raw.data());
+  craftpp::render::Mesher m;
+  const auto mesh = m.mesh_live(w, 0, 0);
+  const int dirt = craftpp::world::bid::block_texture(3, 1, 0);
+  const float du0 = (dirt & 15) * 16.0F / 256.0F, du1 = du0 + 16.0F / 256.0F;
+  auto min_at = [&](float px, float pz) {
+    float v = 2.0F;
+    for (const auto& q : mesh.vertices) {
+      if (q.y != 64.0F || q.u < du0 || q.u >= du1) continue;
+      if (std::abs(q.x - px) > 1e-4F || std::abs(q.z - pz) > 1e-4F) continue;
+      if (q.r < v) v = q.r;
+    }
+    return v;
+  };
+  const float tucked = min_at(8.0F, 8.0F);
+  const float open = min_at(9.0F, 9.0F);
+  REQUIRE(open > 0.9F);
+  CHECK(tucked < open * 0.7F);  // 2 occluders: (0.2+0.2+1+1)/4 = 0.6
+}
+
+TEST_CASE("AO keeps emissive blocks flat", "[mesher]") {
+  // Glowstone (lightValue 15) skips the AO path like the ColorMultiplier
+  // branch. Ringed in stone on two levels, only its top face emits, so the
+  // top corners must stay uniform despite adjacent occluders.
+  craftpp::world::RegionWorld w;
+  std::vector<std::int8_t> raw(16 * 128 * 16, 0);
+  for (int lx = 0; lx < 16; ++lx)
+    for (int lz = 0; lz < 16; ++lz) raw[(lx * 16 + lz) * 128 + 63] = 3;
+  raw[(8 * 16 + 8) * 128 + 64] = 89;  // glowstone
+  for (int dx = -1; dx <= 1; ++dx)
+    for (int dz = -1; dz <= 1; ++dz) {
+      if (dx == 0 && dz == 0) continue;
+      raw[((8 + dx) * 16 + 8 + dz) * 128 + 64] = 1;
+      raw[((8 + dx) * 16 + 8 + dz) * 128 + 65] = 1;
+    }
+  w.ensure_chunk(0, 0, raw.data());
+  craftpp::render::Mesher m;
+  const auto mesh = m.mesh_live(w, 0, 0);
+  const int top = craftpp::world::bid::block_texture(89, 1, 0);
+  const float tu0 = (top & 15) * 16.0F / 256.0F, tu1 = tu0 + 16.0F / 256.0F;
+  float lo = 2.0F, hi = -1.0F;
+  for (const auto& v : mesh.vertices) {
+    if (v.y != 65.0F || v.u < tu0 || v.u >= tu1) continue;
+    if (v.x < 7.99F || v.x > 9.01F || v.z < 7.99F || v.z > 9.01F) continue;
+    if (v.r < lo) lo = v.r;
+    if (v.r > hi) hi = v.r;
+  }
+  REQUIRE(hi > 0.0F);
+  CHECK(hi - lo < 1e-4F);
+}
