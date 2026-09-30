@@ -322,7 +322,8 @@ void RegionWorld::relight_block(int x, int y, int z) {
   const int nx[5] = {wx - 1, wx + 1, wx, wx, wx};
   const int nz[5] = {wz, wz, wz - 1, wz + 1, wz};
   for (int k = 0; k < 5; ++k) {
-    if (hi > lo && chunks_near_exist(nx[k], kHeight / 2, nz[k], 16)) {
+    // No 16-chunk gate (see update_light_by_type): missing reads are 0/air.
+    if (hi > lo) {
       for (int yy = lo; yy < hi; ++yy) update_light_by_type(true, nx[k], yy, nz[k]);
     }
   }
@@ -430,8 +431,12 @@ void RegionWorld::install_saved(int cx, int cz, const std::int8_t* ids, const st
 
 void RegionWorld::update_light_by_type(bool sky, int x, int y, int z) {
   // Mirrors World.updateLightByType (both the decrease flood and the spread
-  // phase) over light_list_. doChunksNearChunkExist radius is 17.
-  if (!chunks_near_exist(x, y, z, 17)) return;
+  // phase) over light_list_. Vanilla gates on doChunksNearChunkExist ±17
+  // (it LOADS missing chunks as a side effect); our finite world has no
+  // load-on-read (missing reads 0/air, writes no-op), so the gate is
+  // dropped — otherwise every edit near the border skips the spread while
+  // relightBlock's direct fill still zeroes spans (permanent black stains).
+  // The BFS stays bounded by its own 17-block radius + the queue cap.
   int rd = 0, wr = 0;
   int saved = get_saved(sky, x, y, z);
   const int id = get_id(x, y, z);

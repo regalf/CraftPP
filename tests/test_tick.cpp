@@ -39,6 +39,26 @@ LiveWorld flat_world() {
 }
 }  // namespace
 
+TEST_CASE("spread refills at the world border (no chunk gate)", "[tick]") {
+  // Single chunk: the vanilla ±17-chunk gate would skip every update here,
+  // leaving relightBlock's zeroed spans permanent (black stains under any
+  // placed block). Our finite world runs the BFS anyway (missing reads 0).
+  LiveWorld w(7LL);
+  w.provide_area(0, 0, 0, 0);
+  for (int x = 0; x < 16; ++x)
+    for (int z = 0; z < 16; ++z) {
+      for (int y = 0; y < 60; ++y) w.set_raw(x, y, z, bid::kStone, 0);
+      for (int y = 60; y < 64; ++y) w.set_raw(x, y, z, bid::kDirt, 0);
+      for (int y = 64; y < 128; ++y) w.set_raw(x, y, z, 0, 0);
+    }
+  w.set_raw(2, 66, 2, bid::kDirt, 0);  // floating dirt, 2 above ground
+  CHECK(w.region().saved_sky(2, 65, 2) == 14);
+  CHECK(w.region().saved_sky(2, 64, 2) == 14);
+  // Breaking it restores full sky below.
+  w.set_raw(2, 66, 2, 0, 0);
+  CHECK(w.region().saved_sky(2, 64, 2) == 15);
+}
+
 TEST_CASE("grass dies under cover", "[tick]") {
   auto w = flat_world();
   w.set_raw(4, 64, 4, bid::kGrass, 0);
