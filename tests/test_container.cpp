@@ -334,3 +334,25 @@ TEST_CASE("creative grid click take/grow/shrink") {
   CHECK(!r.has_value());
   CHECK(k.grid[10]->stack_size == 5);
 }
+
+TEST_CASE("container rebuild is idempotent (no stale slots)") {
+  // Reopening must not append slots or dangle grid backings
+  // (use-after-free that crashed scrolling after a reopen).
+  Inventory inv;
+  Kit k;
+  craftpp::gui::ctn::build_creative(k, inv);
+  auto list = craftpp::gui::ctn::creative_item_list();
+  craftpp::gui::ctn::creative_scroll(k, list, 0.0F);
+  craftpp::gui::ctn::build_creative(k, inv);  // reopen
+  CHECK(k.c.slots.size() == 81);
+  craftpp::gui::ctn::creative_scroll(k, list, 1.0F);
+  craftpp::gui::ctn::creative_scroll(k, list, 0.0F);
+  REQUIRE(k.grid[0].has_value());
+  CHECK(k.grid[0]->item_id == list[0].item_id);
+  // Same for the survival kit (45 slots, matrix kept live).
+  Kit p;
+  craftpp::gui::ctn::build_player(p, inv);
+  p.grid[0] = st(5, 1);
+  craftpp::gui::ctn::build_player(p, inv);  // reopen
+  CHECK(p.c.slots.size() == 45);
+}

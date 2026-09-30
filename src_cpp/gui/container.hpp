@@ -384,6 +384,14 @@ inline void consume_matrix(Kit& k) {
 
 // Verbose builders mirror the source constructors slot for slot.
 inline void build_player(Kit& k, entity::Inventory& inv) {
+  // Rebuilds are idempotent: reopening drops old slots//backings
+  // (stale backings would dangle after grid reassignment).
+  k.c.slots.clear();
+  k.owned.clear();
+  k.c.shift = nullptr;
+  k.c.consume_craft = nullptr;
+  k.c.matrix = nullptr;
+  k.c.result_slot = -1;
   k.small_grid = true;
   k.grid.assign(4, std::nullopt);
   k.result = std::nullopt;
@@ -413,6 +421,14 @@ inline void build_player(Kit& k, entity::Inventory& inv) {
 }
 
 inline void build_workbench(Kit& k, entity::Inventory& inv) {
+  // Rebuilds are idempotent: reopening drops old slots//backings
+  // (stale backings would dangle after grid reassignment).
+  k.c.slots.clear();
+  k.owned.clear();
+  k.c.shift = nullptr;
+  k.c.consume_craft = nullptr;
+  k.c.matrix = nullptr;
+  k.c.result_slot = -1;
   k.small_grid = false;
   k.grid.assign(9, std::nullopt);
   k.result = std::nullopt;
@@ -441,6 +457,14 @@ inline void build_workbench(Kit& k, entity::Inventory& inv) {
 
 inline void build_furnace(Kit& k, entity::Inventory& inv,
                            std::array<std::optional<entity::ItemStack>, 3>& fz) {
+  // Rebuilds are idempotent: reopening drops old slots//backings
+  // (stale backings would dangle after grid reassignment).
+  k.c.slots.clear();
+  k.owned.clear();
+  k.c.shift = nullptr;
+  k.c.consume_craft = nullptr;
+  k.c.matrix = nullptr;
+  k.c.result_slot = -1;
   k.small_grid = false;
   k.grid.clear();
   k.result = std::nullopt;
@@ -464,7 +488,16 @@ inline void build_furnace(Kit& k, entity::Inventory& inv,
 }
 
 inline void build_chest(Kit& k, entity::Inventory& inv,
-                         std::array<std::optional<entity::ItemStack>, 27>& ch) {  k.small_grid = false;
+                         std::array<std::optional<entity::ItemStack>, 27>& ch) {
+  // Rebuilds are idempotent: reopening drops old slots//backings
+  // (stale backings would dangle after grid reassignment).
+  k.c.slots.clear();
+  k.owned.clear();
+  k.c.shift = nullptr;
+  k.c.consume_craft = nullptr;
+  k.c.matrix = nullptr;
+  k.c.result_slot = -1;
+  k.small_grid = false;
   k.grid.clear();
   k.result = std::nullopt;
   auto* main_b = k.keep(std::make_unique<ArrBacking<36>>(&inv.main));
@@ -606,6 +639,14 @@ inline std::vector<entity::ItemStack> creative_item_list() {
 }
 
 inline void build_creative(Kit& k, entity::Inventory& inv) {
+  // Rebuilds are idempotent: reopening drops old slots//backings
+  // (stale backings would dangle after grid reassignment).
+  k.c.slots.clear();
+  k.owned.clear();
+  k.c.shift = nullptr;
+  k.c.consume_craft = nullptr;
+  k.c.matrix = nullptr;
+  k.c.result_slot = -1;
   k.small_grid = false;
   k.grid.assign(72, std::nullopt);
   k.result = std::nullopt;
