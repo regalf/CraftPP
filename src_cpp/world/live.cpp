@@ -26,7 +26,12 @@ void LiveWorld::populate_one(int cx, int cz) {
   if (populated_.count({cx, cz}) != 0) return;
   populate_chunk(region_, manager_, seed_, cx, cz, wrand_);
   populated_[{cx, cz}] = true;
-  dirty_[{cx, cz}] = true;
+  // Populate scatter (decorations, lakes, dungeons, snow cap) writes up to
+  // one chunk past the borders, bypassing per-write dirty marks. Mark the
+  // 3x3 neighbourhood or earlier-meshed neighbours keep stale meshes
+  // (snow layers / tall grass stay invisible until any later re-mesh).
+  for (int dz = -1; dz <= 1; ++dz)
+    for (int dx = -1; dx <= 1; ++dx) dirty_[{cx + dx, cz + dz}] = true;
 }
 
 void LiveWorld::provide_area(int cx0, int cz0, int cx1, int cz1) {

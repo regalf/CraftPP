@@ -271,6 +271,23 @@
   sides give ao 1.0 either way (leaves are not normal cubes).
   User verification on their own canopy save pending.
 
+### F34. Populate spill left neighbour chunks with stale meshes
+- `populate_chunk` places decorations/dungeons/lakes/snow with
+  `+rand(16)+8`-biased origins, i.e. up to 8 blocks into the +x/+z
+  neighbours, bypassing per-write dirty marks. `populate_one` marked only
+  its own chunk dirty, so neighbours meshed earlier in the boot sequence
+  kept meshes WITHOUT the spilled blocks: snow layers / tall grass (and
+  border tree bits) stayed invisible until any later chunk update forced
+  a re-mesh. Fix: `populate_one` marks the 3x3 neighbourhood dirty; the
+  in-game loop re-meshes dirty chunks on the first frames after load.
+  Regression test diffs chunk bytes around `populate_one(0,0)` and asserts
+  every touched chunk is dirty (fails-before/passes-after; seed 1 spills
+  into neighbours). Verified live: fresh seed-10 (ice plains) boots with
+  snow+ice rendered; seed-1 data holds 29 tufts near spawn.
+  NOTE for snow reports: snow only generates at temp <= 0.15 (ice
+  plains/mountains 0.0; taiga 0.3 gets NO snow in vanilla either) — check
+  the biome before suspecting generation.
+
 ## OPEN — AO shadow uniformity (2026-09-30)
 - F33 (above) fixed the verbatim gate bug behind the steps/reversed
   gradients. Pending: user re-checks their canopy save (fix applies on

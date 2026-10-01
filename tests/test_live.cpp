@@ -106,6 +106,32 @@ TEST_CASE("live world generation is deterministic", "[live]") {  auto hash_world
   CHECK(hash_world(a) == hash_world(b));
 }
 
+TEST_CASE("populate marks spilled neighbour chunks dirty", "[live]") {
+  // Populate scatter (decorations, dungeons, snow cap) writes past chunk
+  // borders with +8-biased origins. Every chunk touched by populate_one
+  // must come out dirty or earlier-meshed neighbours keep stale meshes
+  // (snow layers / tall grass invisible until any later re-mesh).
+  craftpp::world::LiveWorld w(1LL);
+  for (int cx = -1; cx <= 1; ++cx)
+    for (int cz = -1; cz <= 1; ++cz) {
+      w.gen_chunk(cx, cz);
+      w.clear_dirty(cx, cz);
+    }
+  std::map<std::pair<int, int>, std::vector<std::int8_t>> before;
+  for (int cx = -1; cx <= 1; ++cx)
+    for (int cz = -1; cz <= 1; ++cz) before[{cx, cz}] = w.chunk_ids(cx, cz);
+  w.populate_one(0, 0);
+  bool spilled = false;
+  for (int cx = -1; cx <= 1; ++cx)
+    for (int cz = -1; cz <= 1; ++cz) {
+      if (w.chunk_ids(cx, cz) == before[{cx, cz}]) continue;
+      spilled = spilled || (cx != 0 || cz != 0);
+      INFO("chunk " << cx << "," << cz << " touched by populate");
+      CHECK(w.is_dirty(cx, cz));
+    }
+  CHECK(spilled);  // seed 1 must scatter past (0,0) or the test is vacuous
+}
+
 TEST_CASE("creative double-tap space toggles fly", "[live]") {
   craftpp::world::LiveWorld w(1LL);
   w.provide_area(-1, -1, 1, 1);
