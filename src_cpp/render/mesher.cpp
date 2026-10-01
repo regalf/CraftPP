@@ -289,12 +289,14 @@ Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz, boo
     b = world.saved_block(cx, cy, cz);
   };
   auto ao_grass = [&](int cx, int cy, int cz) {
-    // Block.canBlockGrass parity (opaque logic materials; transparent and
-    // leaves/water never block grass).
+    // Block.canBlockGrass gate parity: vanilla falls back to the side
+    // cell when BOTH gate cells are getCanBlockGrass() (solid sides).
+    // can_block_grass() mirrors Material.getCanBlockGrass exactly
+    // (false only for air/fire/plants/vine/snow/circuits materials).
     const int gid = (cy < 0 || cy >= world::RegionWorld::kHeight)
                         ? 0
                         : world.get_id(cx, cy, cz);
-    return world::bid::material_opaque(gid);
+    return world::bid::can_block_grass(gid);
   };
   auto ao_corners = [&](int bx, int by, int bz, const FaceDesc& f, float* cc) {
     const AoFace& af = kAo[static_cast<int>(f.face)];
@@ -305,8 +307,11 @@ Mesh Mesher::mesh_live_impl(const world::RegionWorld& world, int cx, int cz, boo
       ao_cell(bx + t.fb[0], by + t.fb[1], bz + t.fb[2], aF, sF, bF);
       ao_cell(bx + t.ot[0], by + t.ot[1], bz + t.ot[2], aO, sO, bO);
       ao_cell(bx + af.ox, by + af.oy, bz + af.oz, aC, sC, bC);
-      if (!ao_grass(bx + t.g1[0], by + t.g1[1], bz + t.g1[2]) &&
-          !ao_grass(bx + t.g2[0], by + t.g2[1], bz + t.g2[2])) {
+      // Diagonal gate (verbatim): vanilla tests !canBlockGrass[] where the
+      // field is the NEGATION of Material.getCanBlockGrass, i.e. falls back
+      // when both gate cells ARE getCanBlockGrass (solid sides).
+      if (ao_grass(bx + t.g1[0], by + t.g1[1], bz + t.g1[2]) &&
+          ao_grass(bx + t.g2[0], by + t.g2[1], bz + t.g2[2])) {
         aD = aF;
         sD = sF;
         bD = bF;

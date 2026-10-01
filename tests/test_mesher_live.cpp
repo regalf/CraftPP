@@ -204,6 +204,44 @@ TEST_CASE("AO darkens concave corners per-vertex", "[mesher]") {
   CHECK(tucked < open * 0.7F);  // 2 occluders: (0.2+0.2+1+1)/4 = 0.6
 }
 
+TEST_CASE("AO ignores the diagonal between two solid sides (grass gate)", "[mesher]") {
+  // Grass block (8,64,8) (top tile 0 isolates the top face from dirt
+  // sides); sampling plane y=65 holds stone on the two +x+z sides
+  // (9,65,8),(8,65,9) and air on the diagonal (9,65,9). Stone sides must
+  // trigger the vanilla fallback (diagonal ignored, reuses the side), so
+  // the (9,65,9) corner averages (0.2+0.2+0.2+1.0)/4 = 0.4. An inverted
+  // gate (opaque test) uses the true air diagonal -> 0.6, pulling an
+  // unshared cell into the corner and breaking shadow continuity between
+  // neighbour blocks. The (8,65,8) corner is open air (1.0) under the
+  // same light as reference (biome tint cancels out).
+  // (Leaves would NOT discriminate: their ao value is 1.0 either way.)
+  craftpp::world::RegionWorld w;
+  std::vector<std::int8_t> raw(16 * 128 * 16, 0);
+  for (int lx = 0; lx < 16; ++lx)
+    for (int lz = 0; lz < 16; ++lz) raw[(lx * 16 + lz) * 128 + 63] = 3;
+  raw[(8 * 16 + 8) * 128 + 64] = 2;   // grass block under test
+  raw[(9 * 16 + 8) * 128 + 65] = 1;   // stone side +x
+  raw[(8 * 16 + 9) * 128 + 65] = 1;   // stone side +z
+  w.ensure_chunk(0, 0, raw.data());
+  craftpp::render::Mesher m;
+  const auto mesh = m.mesh_live(w, 0, 0);
+  const int top = craftpp::world::bid::block_texture(2, 1, 0);
+  const float tu0 = (top & 15) * 16.0F / 256.0F, tu1 = tu0 + 16.0F / 256.0F;
+  auto min_at = [&](float px, float pz) {
+    float v = 2.0F;
+    for (const auto& q : mesh.vertices) {
+      if (q.y != 65.0F || q.u < tu0 || q.u >= tu1) continue;
+      if (std::abs(q.x - px) > 1e-4F || std::abs(q.z - pz) > 1e-4F) continue;
+      if (q.r < v) v = q.r;
+    }
+    return v;
+  };
+  const float gated = min_at(9.0F, 9.0F);
+  const float open = min_at(8.0F, 8.0F);
+  REQUIRE(open > 0.4F);  // plains grass tint red (~0.486) at full light
+  CHECK(gated < open * 0.5F);  // 0.4 gated vs 0.6 with the inverted gate
+}
+
 TEST_CASE("AO keeps emissive blocks flat", "[mesher]") {
   // Glowstone (lightValue 15) skips the AO path like the ColorMultiplier
   // branch. Ringed in stone on two levels, only its top face emits, so the

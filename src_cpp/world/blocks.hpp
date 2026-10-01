@@ -745,6 +745,50 @@ inline bool material_is_solid(int id) {
   }
 }
 
+// Mirrors Material.getCanBlockGrass (default true; false ONLY for
+// Transparent (air, fire) and Logic (plants/vine/snow/circuits)
+// materials). This is the AO diagonal gate: vanilla falls back to the
+// side cell when BOTH gate cells return true here (i.e. solid sides).
+// TRAP: the Block.canBlockGrass[] field is the NEGATION (!getCanBlockGrass),
+// so "canBlockGrass true" means grass CAN grow (transparent). A naive
+// material_opaque gate inverts the rule and breaks shadow continuity
+// under canopies (each corner then pulls an unshared diagonal cell).
+inline bool can_block_grass(int id) {
+  // Air (id 0) is never constructed in vanilla so canBlockGrass[0] stays
+  // array-default false -> the gate sees it as solid (fallback). Hence
+  // air returns true here via the default branch.
+  switch (id) {
+    case kSapling:
+    case kRailPowered:
+    case kRailDetector:
+    case kTallGrass:
+    case kDeadBush:
+    case kFlowerYellow:
+    case kFlowerRed:
+    case kMushroomBrown:
+    case kMushroomRed:
+    case kTorch:
+    case kFire:
+    case kRedstoneWire:
+    case kCrops:
+    case kRail:
+    case kLever:
+    case kTorchRedIdle:
+    case kTorchRedOn:
+    case kButton:
+    case kSnowCover:
+    case kReed:
+    case kRepeaterIdle:
+    case kRepeaterOn:
+    case kVine:
+    case kLilyPad:
+    case kLadder:
+      return false;
+    default:
+      return true;
+  }
+}
+
 // Mirrors Material.getIsOpaque = isSolid && !translucent. Translucent set:
 // leaves, glass, tnt, ice, snow, cactus, glowstone. Used by fence shaping.
 inline bool material_opaque(int id) {

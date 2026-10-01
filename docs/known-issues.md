@@ -251,7 +251,30 @@
   Re-apply `item-shell FP tuning WIP` stash to retest (debug binary is
   gone — rebuilt since).
 
+### F33. AO diagonal gate inverted (shadow steps + flipped gradients)
+- `ao_grass` used `material_opaque`, but vanilla's gate tests
+  `!canBlockGrass[]` where the field is the NEGATION of
+  `Material.getCanBlockGrass` — i.e. vanilla ignores the diagonal when
+  both side cells are SOLID (stone/dirt/leaves/trunk) and uses the true
+  diagonal only between transparent sides. Ours did the exact opposite:
+  every corner near solid geometry pulled in a 4th diagonal cell its
+  neighbour blocks don't share -> hard steps at block borders and
+  gradients that flip direction from one block to the next (the "cubes
+  don't talk to each other" symptom, worst under pre-generated canopy
+  shade). Fixed with a verbatim `can_block_grass()` table
+  (`Material.getCanBlockGrass`: false only for air/fire/plants/vine/
+  snow/circuits materials; air counts as solid since `canBlockGrass[0]`
+  stays array-default false). Regression test fails-before (0.6) /
+  passes-after (0.4); trunk-base contact shadow visibly smoother in
+  before/after screenshots (same seed+camera). Invisible to the old
+  tests because solid-everywhere corners give 0.2 either way, and leaf
+  sides give ao 1.0 either way (leaves are not normal cubes).
+  User verification on their own canopy save pending.
+
 ## OPEN — AO shadow uniformity (2026-09-30)
+- F33 (above) fixed the verbatim gate bug behind the steps/reversed
+  gradients. Pending: user re-checks their canopy save (fix applies on
+  reload, no regen needed — AO bakes at mesh time). Pillar probe removed.
 - User sees block-edge steps where vanilla looks smooth. Ruled out so far:
   AO tables verified at runtime, TL,BL,BR,TR winding map verified against
   all six `render*Face` emission orders, tint is smooth biome noise, leaves
