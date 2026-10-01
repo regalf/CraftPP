@@ -1367,6 +1367,13 @@ int main(int argc, char** argv) {
             }  // end !cgui hotbar/mode gate
 
             world.tick();
+            // Dynamic water/lava tiles (TextureFX) advance per game tick
+            // (vanilla RenderEngine.updateDynamicTextures runs in runTick,
+            // 20 Hz — NOT per render frame, or water flows 3x too fast).
+            for (auto* fx : {&fx_water, &fx_water_flow, &fx_lava, &fx_lava_flow}) {
+              const auto& fxp = fx->tick();
+              atlas.sub_upload_tile(atlas_img, fx->tile(), fxp.data());
+            }
             if (!cgui && !game->creative) game->csp->update_controller();
             // Equip animation runs on game ticks (4 ticks full traverse):
             // vanilla advances it per render frame (instant at high fps),
@@ -1525,11 +1532,7 @@ int main(int argc, char** argv) {
         terrain_prog.use();
         terrain_prog.set_mat4(t_mvp, &vp[0][0]);
         terrain_prog.set_mat4(t_view, &view[0][0]);
-        // Dynamic water/lava tiles (TextureFX), uploaded into the atlas.
-        for (auto* fx : {&fx_water, &fx_water_flow, &fx_lava, &fx_lava_flow}) {
-          const auto& px = fx->tick();
-          atlas.sub_upload_tile(atlas_img, fx->tile(), px.data());
-        }
+        // (TextureFX tiles tick + upload in the 20 Hz game-tick block above.)
         // Camera inside a fluid (eye below the lowered surface, like
         // isInsideOfMaterial/ActiveRenderInfo): EXP-style fog approximated
         // with the linear uniforms (water ~2..16, lava ~0..0.8).

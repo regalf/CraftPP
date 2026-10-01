@@ -288,6 +288,19 @@
   plains/mountains 0.0; taiga 0.3 gets NO snow in vanilla either) — check
   the biome before suspecting generation.
 
+### F35. Water/lava TextureFX ticked per frame (3x too fast)
+- The four animated atlas tiles were advanced in the render loop (~60 Hz).
+  Vanilla advances them in `runTick` (20 Hz). Water flow scrolled a full
+  tile every ~5 frames instead of ~16 ticks. Fix: tick + re-upload in the
+  20 TPS game-tick block next to `world.tick()`. (No unit test: the bug
+  was call frequency in app wiring, the FX stepping itself is verbatim.)
+- Lateral-flow note (same report, NOT a second bug so far): side faces
+  never rotate/scroll laterally in vanilla either — directional flow
+  shows only on top faces (UV rotation, verbatim incl. the -1000/atan2
+  convention) plus the height-following top edge on sides. At 3x speed
+  the scroll reads as chaos, which masks direction; re-check laterals
+  after this fix, on true flowing (not still-lake) tops.
+
 ## OPEN — AO shadow uniformity (2026-09-30)
 - F33 (above) fixed the verbatim gate bug behind the steps/reversed
   gradients. Pending: user re-checks their canopy save (fix applies on
