@@ -251,7 +251,7 @@
   Re-apply `item-shell FP tuning WIP` stash to retest (debug binary is
   gone — rebuilt since).
 
-## OPEN — AO block-edge uniformity (2026-09-30)
+## OPEN — AO shadow uniformity (2026-09-30)
 - User sees block-edge steps where vanilla looks smooth. Ruled out so far:
   AO tables verified at runtime, TL,BL,BR,TR winding map verified against
   all six `render*Face` emission orders, tint is smooth biome noise, leaves
