@@ -170,6 +170,7 @@ fly double-tap, TPS meter, auto-respawn).
    Chunk.getBlockLightValue (daylight subtraction) through the vanilla
    lightBrightnessTable, mesh rebake when the subtraction flips, spawner
    already verbatim (sky-gate rand(32), then full <= rand(8)).
+   Smooth lighting done 2026-09-30 (fancy AO path verbatim, per-vertex).
 
 Known debts: `craftpp_demo` deprecated (unmaintained, notice at
 startup); zombie feel pending real paths (interpolation done).

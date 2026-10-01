@@ -83,5 +83,19 @@ kept in `/tmp` (never committed).
   `populate_chunk` takes the shared `World.rand` stream.
 
 Deferred to later milestones: fluid spread (M5 fluid sim), spawner entities
-(M4/M5), structures/mineshafts/villages/strongholds (M5), skylight engine
-(M5), save format (M5).
+(M4/M5), structures/mineshafts/villages/strongholds (M5), save format (M5).
+
+## Light engine (M5, done + hardened 2026-09-30)
+
+- `region.hpp/cpp` — `RegionWorld`: stored heightMap + sky/block nibbles,
+  `relightBlock` (incl. the vanilla local-coords quirk), `updateLightByType`
+  BFS (decrease flood + increase spread), `updateAllLightTypes` on every
+  write, stored-height `canBlockSeeTheSky`, lazy precip heights, lava
+  `lightValue`. Opacity table matches vanilla (opaque 255, leaves 1,
+  water/ice 3, lava 255). Spawner rules already verbatim (sky-gate
+  `rand(32)`, then full `<= rand(8)`).
+- Finite-world rule: vanilla's ±17/±16 chunk-load gates are dropped (no
+  load-on-read side effects exist; missing reads 0/air, writes no-op).
+  Keeping them froze every dynamic update near the border while
+  `relightBlock` fills still zeroed spans = permanent black stains under
+  placed blocks. Regression test fails-before/passes-after.

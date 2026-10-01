@@ -10,11 +10,13 @@ OpenGL 3.3+, CMake).
 Status: M5 singleplayer slice — everything M4 was (deterministic core,
 chunk rendering, Java-identical world generation, bit-identical player
 physics and block break/place, differential-tested against the 1.0
-engine), plus a live world: synchronous light engine, day/night cycle,
-random block ticks (grass, leaves, ice, fire), furnaces/chests/signs,
-item drops + inventory pickup, pigs + zombies with spawning, the full
-1.0 crafting table, and creative mode. Suite fully green (40625
-assertions, zero gaps).
+engine), plus a live world: synchronous light engine (day/night-correct
+rendering with the vanilla brightness table, per-vertex smooth lighting),
+day/night cycle, random block ticks (grass, leaves, ice, fire),
+furnaces/chests/signs, item drops + inventory pickup, pigs + zombies with
+spawning, the full 1.0 crafting table, playable inventory/workbench/
+furnace/chest/creative-picker GUIs, and creative mode. Suite fully green
+(46535 assertions, zero gaps).
 A playable demo (`craftpp_demo`) walks, mines, crafts-by-hand and
 survives on real terrain.
 
@@ -90,10 +92,10 @@ Dependencies (Arch): `glfw`, `glad` (via `epoxy`), `glm`, `openal`,
 cmake -S . -B build
 cmake --build build
 ./build/craftpp_tests   # full parity suite (ctest also works)
-./build/craftpp [--assets DIR]  # M2 chunk renderer (needs your own
-                                # terrain.png under assets/, never committed)
-./build/craftpp_demo [--seed N]  # playable survival slice: WASD/mouse,
-                                 # Space jump, Shift sneak, LMB mine,
-                                 # RMB place held stack, 1-9 hotbar,
-                                 # G creative/survival, ESC quit
+./build/craftpp [--assets DIR]  # client: WASD/mouse, Space jump,
+                                # Shift sneak, LMB mine/melee, RMB place,
+                                # 1-9 hotbar + wheel, E inventory,
+                                # G creative, F5 persona, ESC menu
+./build/craftpp_demo [--seed N]  # playable survival slice (deprecated,
+                                 # unmaintained — use craftpp)
 ```

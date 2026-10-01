@@ -213,6 +213,52 @@
   Block/World calls. Both flagged oracle-assisted, behavior-tested.
 - Breaking piston-extension meta 6/7 crashes vanilla (`Facing` table).
 
+## Fixed bugs, M5 GUI/light round (for the record)
+
+### F29. Wheel-down infinite loop (hotbar)
+- `while (g_wheel < 0)` decremented instead of incrementing: first
+  scroll-down notch hung the main thread (GNOME force-quit popup). Found
+  from the user's gdb stack pointing at the loop line. One-char fix.
+  Lesson: gate every new input path with a headless injection test.
+
+### F30. Container reopen use-after-free
+- Builders appended slots/backings to the reused kit: after reopen,
+  `grid.assign` reallocated under stale `VecBacking` pointers; scrolling
+  the creative picker then read freed memory. Fix: builders clear
+  slots/backings/callbacks first (idempotent rebuild). Regression test
+  fails-before/passes-after.
+
+### F31. Edge light updates skipped (black stains under placed blocks)
+- Vanilla `doChunksNearChunkExist ±17/±16` gates exist to avoid chunk
+  *loading* side effects. Our finite 3x3 world has no load-on-read, but
+  the gates failed everywhere, so `updateLightByType` never ran in game
+  while `relightBlock` fills still zeroed spans: permanent black stains
+  under any placed opaque block (taller = longer stain; low-placed leaves
+  untouched because they never trigger relight). Fix: gates dropped, BFS
+  stays bounded by its own radius + queue cap. Regression test
+  fails-before/passes-after.
+
+### F32. AO packed-zero fallback must not touch ao averages
+- Porting `getAoBrightness`, I applied the packed-zero→center fallback to
+  the occlusion values too. Vanilla only falls it back on the packed
+  brightness; `var9-12` are straight averages. Effect was zero corner
+  darkening anywhere. Found by unit test + corner probes.
+
+## OPEN — first-person item extrusion (parked 2026-09-29, stash kept)
+- FP-only perimeter shell (`emit_item_shell`) closes the geometry by
+  construction; unprojection proved remaining slits hit transparent sprite
+  texels on both faces (genuine cutout). Pending the user's vanilla A/B.
+  Re-apply `item-shell FP tuning WIP` stash to retest (debug binary is
+  gone — rebuilt since).
+
+## OPEN — AO block-edge uniformity (2026-09-30)
+- User sees block-edge steps where vanilla looks smooth. Ruled out so far:
+  AO tables verified at runtime, TL,BL,BR,TR winding map verified against
+  all six `render*Face` emission orders, tint is smooth biome noise, leaves
+  opacity 1 on both sides. Pending: synthetic pillar-scene measurement
+  (TEMP `CRAFTPP_PILLAR` hook still in tree, uncommitted) + confirming the
+  user's binary postdates the AO commit (stale-binary pattern seen before).
+
 ## Flaky JVM harness launches
 
 `java -cp classes ... | grep/pipe` intermittently yields empty stdout.

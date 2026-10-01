@@ -42,6 +42,22 @@ fog + sky color, frustum-culled draw, 20 TPS tick accumulator.
 ./build/craftpp --flat                               # M2 flat chunk
 ```
 
+## Light bake & smooth lighting (M5)
+
+- Per-face brightness = `Chunk.getBlockLightValue` (stored nibbles minus
+  the daytime `skylightSubtracted`) through the `WorldProvider`
+  `lightBrightnessTable` (overworld curve `(1-f)/(3f+1)`); no readability
+  floor, caves go black like vanilla. Meshes rebake when the subtraction
+  flips (dawn/dusk). Drops + underwater overlay use the same curve.
+- Fancy path = `renderStandardBlockWithAmbientOcclusion` verbatim for
+  non-emissive full cubes: per-corner side/diagonal/center mixes with the
+  packed-zero fallback (brightness only, never the ao averages), grass
+  diagonal gates, `TL,BL,BR,TR` vertex map verified against the six
+  `render*Face` emission orders, `aoType` always 1, fancy default ON.
+  Slabs/stairs/cross/fluids/vines/ladders stay on the flat path (leftover).
+  Gotcha found mid-port: applying the zero-fallback to ao averages kills
+  all   corner darkening — vanilla only falls back the packed brightness.
+
 ## Gotchas already hit (see also `known-issues.md`)
 
 - `glReadPixels` needs `GL_PACK_ALIGNMENT, 1` (854×3-byte rows are not
